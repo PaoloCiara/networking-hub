@@ -1,0 +1,44 @@
+{
+  "name": "networking-opportunity-hub",
+  "version": "0.1.0",
+  "description": "AI-powered networking CRM and opportunity tracker",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron .",
+    "dist": "electron-builder --mac dir"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "productName": "Networking Hub",
+  "build": {
+    "appId": "com.paolo.networkinghub",
+    "productName": "Networking Hub",
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "identity": null
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "db.js",
+      "services/**",
+      "renderer/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "dependencies": {
+    "pdf-parse": "^2.4.5"
+  }
+}

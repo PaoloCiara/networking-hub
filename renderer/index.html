@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Networking Hub</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 1024 1024" width="22" height="22">
+          <path d="M290 706 L468 524 L612 614 L744 372" stroke="#ffffff" stroke-width="72" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+          <circle cx="290" cy="706" r="84" fill="#ffffff"/>
+          <circle cx="468" cy="524" r="84" fill="#ffffff"/>
+          <circle cx="612" cy="614" r="84" fill="#ffffff"/>
+          <circle cx="744" cy="372" r="106" fill="#ffffff"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">Networking Hub</div>
+        <div class="brand-sub">Opportunity tracker</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M1 1h6v6H1V1zm8 0h6v4H9V1zM1 9h6v6H1V9zm8-2h6v8H9V7z" opacity="0.9"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-view="profile">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M4 1h6l3 3v10a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm1 6h6v1.2H5V7zm0 2.5h6v1.2H5V9.5zm0 2.5h4v1.2H5V12z"/></svg>
+        My Profile
+      </button>
+      <button class="nav-item" data-view="contacts">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 8a3 3 0 100-6 3 3 0 000 6zm0 1.5c-2.7 0-6 1.3-6 3.5v1h12v-1c0-2.2-3.3-3.5-6-3.5z"/></svg>
+        Contacts
+      </button>
+      <button class="nav-item" data-view="opportunities">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M6 2h4a1 1 0 011 1v1h3a1 1 0 011 1v8a1 1 0 01-1 1H2a1 1 0 01-1-1V5a1 1 0 011-1h3V3a1 1 0 011-1zm1 2h2V3.5H7V4z"/></svg>
+        Opportunities
+      </button>
+      <button class="nav-item" data-view="forecast">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M1 13.5L5.5 9l3 3L15 5.5V9h-1.3V8L8.5 13.2l-3-3L2 14.4l-1-.9zM10 4h5v1.3h-5V4z" opacity="0"/><path fill="currentColor" d="M2 2v11h12v1.5H.5V2H2zm12.4 1.6l1.1 1L10 10.3 7.5 7.8 4 11.4l-1.1-1L7.5 5.6 10 8.1l4.4-4.5z"/></svg>
+        Forecast
+      </button>
+      <button class="nav-item" data-view="companies">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M2 14V3a1 1 0 011-1h6a1 1 0 011 1v11h2V7h2a1 1 0 011 1v6h1v1H1v-1h1zm2-9h2v1.3H4V5zm0 3h2v1.3H4V8zm0 3h2v1.3H4V11zm3-6h2v1.3H7V5zm0 3h2v1.3H7V8zm0 3h2v1.3H7V11z"/></svg>
+        Companies
+      </button>
+      <button class="nav-item" data-view="learn">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 2L1 5.5 8 9l5.5-2.75V10H15V5.5L8 2zM4 8.8v2.7c0 1 1.8 2 4 2s4-1 4-2V8.8L8 10.8 4 8.8z"/></svg>
+        Learn
+      </button>
+      <button class="nav-item" data-view="settings">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 10a2 2 0 100-4 2 2 0 000 4zm6-2c0 .3 0 .6-.1.9l1.3 1-1.2 2.1-1.6-.5c-.4.4-.9.7-1.5.9L10.5 14h-2.4l-.4-1.6a4.6 4.6 0 01-1.5-.9l-1.6.5-1.2-2.1 1.3-1a4.7 4.7 0 010-1.8l-1.3-1 1.2-2.1 1.6.5c.4-.4.9-.7 1.5-.9L8.1 2h2.4l.4 1.6c.6.2 1.1.5 1.5.9l1.6-.5 1.2 2.1-1.3 1c.1.3.1.6.1.9z"/></svg>
+        Settings
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span class="ai-dot" id="ai-dot"></span>
+      <span id="ai-status">Checking AI status</span>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Dashboard -->
+    <section id="view-dashboard" class="view">
+      <header class="view-head">
+        <div>
+          <h1>Dashboard</h1>
+          <p class="view-sub">Your networking activity at a glance</p>
+        </div>
+      </header>
+      <div id="whats-new" class="whats-new" hidden></div>
+      <div class="stat-grid">
+        <div class="stat-card"><span class="stat-num" id="d-contacts">0</span><span class="stat-lbl">Contacts</span></div>
+        <div class="stat-card"><span class="stat-num urgent" id="d-followups">0</span><span class="stat-lbl">Need follow-up</span></div>
+        <div class="stat-card"><span class="stat-num success" id="d-replied">0</span><span class="stat-lbl">Replied</span></div>
+        <div class="stat-card"><span class="stat-num" id="d-opps">0</span><span class="stat-lbl">Open opportunities</span></div>
+        <div class="stat-card"><span class="stat-num success" id="d-fits">0</span><span class="stat-lbl">Strong fits</span></div>
+        <div class="stat-card"><span class="stat-num" id="d-applied">0</span><span class="stat-lbl">Applied</span></div>
+      </div>
+      <h2 class="section-title">Top matches for you</h2>
+      <div id="d-matches" class="list"></div>
+      <h2 class="section-title">Follow-up queue</h2>
+      <div id="d-queue" class="list"></div>
+    </section>
+
+    <!-- Forecast -->
+    <section id="view-forecast" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Forecast</h1>
+          <p class="view-sub">Predicted upcoming openings, from your feed's history and known recruiting cycles</p>
+        </div>
+        <button class="btn primary" id="btn-gen-forecast">Generate forecast</button>
+      </header>
+      <p class="status-line" id="forecast-status"></p>
+      <div id="forecast-summary" class="brief-box" hidden></div>
+      <div id="forecast-list" class="list" style="margin-top:12px"></div>
+    </section>
+
+    <!-- Profile -->
+    <section id="view-profile" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1>My Profile</h1>
+          <p class="view-sub">Everything the AI uses to match jobs, draft emails, and build courses for you</p>
+        </div>
+        <button class="btn primary" id="btn-save-profile">Save profile</button>
+      </header>
+      <div class="form">
+        <div class="form-section">
+          <h3>Basics</h3>
+          <div class="two-col">
+            <label>Full name <input type="text" id="p-name"></label>
+            <label>Email <input type="email" id="p-email"></label>
+          </div>
+          <div class="two-col">
+            <label>Phone <input type="tel" id="p-phone"></label>
+            <label>Location <input type="text" id="p-location" placeholder="City, State"></label>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>Education</h3>
+          <div class="two-col">
+            <label>School <input type="text" id="p-school"></label>
+            <label>Major <input type="text" id="p-major"></label>
+          </div>
+          <label>Graduation year <input type="text" id="p-gradyear" placeholder="2027"></label>
+        </div>
+
+        <div class="form-section">
+          <h3>Links</h3>
+          <label>GitHub <input type="url" id="p-github" placeholder="https://github.com/username"></label>
+          <label>LinkedIn <input type="url" id="p-linkedin" placeholder="https://linkedin.com/in/username"></label>
+          <label>Portfolio or personal site <input type="url" id="p-portfolio"></label>
+        </div>
+
+        <div class="form-section">
+          <h3>Career direction</h3>
+          <label>Interests
+            <input type="text" id="p-interests" placeholder="machine learning, fintech, product design">
+            <span class="hint">Comma-separated. These drive job matching and course suggestions.</span>
+          </label>
+          <label>Goals
+            <textarea id="p-goals" rows="2" placeholder="e.g. Land a software engineering internship for summer 2027"></textarea>
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>Resume</h3>
+          <div class="btn-row">
+            <button class="btn" id="btn-import-resume">Import from file (PDF or text)</button>
+            <button class="btn" id="btn-resume-feedback">Get AI feedback</button>
+            <span class="status-line" id="resume-status"></span>
+          </div>
+          <label>Resume text
+            <textarea id="p-resume" rows="10" placeholder="Paste your resume here, or import it from a file above"></textarea>
+            <span class="hint">Stored only on this Mac. Sent to the AI only when you run matching, research, or drafting.</span>
+          </label>
+          <div id="resume-feedback" class="brief-box" hidden></div>
+        </div>
+
+        <div class="form-section">
+          <h3>Web presence</h3>
+          <div class="btn-row">
+            <button class="btn" id="btn-scan-me">Scan the web for mentions of me</button>
+            <span class="status-line" id="scan-status"></span>
+          </div>
+          <span class="hint">Searches for articles, public profiles, and project pages that mention you. Needs both API keys. Save your profile first so the scan has your latest details.</span>
+          <div id="me-mentions" class="link-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contacts -->
+    <section id="view-contacts" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Contacts</h1>
+          <p class="view-sub">People you're building relationships with</p>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btn-suggest-contacts">Find people to contact</button>
+          <button class="btn primary" id="btn-add-contact">Add contact</button>
+        </div>
+      </header>
+
+      <h2 class="section-title">Suggested contacts</h2>
+      <p class="hint">AI plans a few searches from your profile and best-fit companies — alumni first — and pulls public profiles worth a cold outreach. These are unverified leads, not confirmed connections; open each profile and verify before you email. Each run uses up to 4 SerpAPI searches.</p>
+      <p class="status-line" id="suggest-status"></p>
+      <div id="suggest-list" class="list"></div>
+
+      <h2 class="section-title">Your contacts</h2>
+      <div class="filter-row" id="contact-filters">
+        <button class="chip active" data-f="all">All</button>
+        <button class="chip" data-f="emailed">Emailed</button>
+        <button class="chip" data-f="replied">Replied</button>
+        <button class="chip" data-f="needs_follow_up">Follow-up</button>
+      </div>
+      <div id="contact-list" class="list"></div>
+    </section>
+
+    <!-- Opportunities -->
+    <section id="view-opportunities" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Opportunities</h1>
+          <p class="view-sub">Jobs and openings from job boards, aggregators, and your watched careers pages</p>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btn-add-opp">Add manually</button>
+          <button class="btn" id="btn-match-opps">Match to my profile</button>
+          <button class="btn primary" id="btn-refresh-opps">Fetch latest</button>
+        </div>
+      </header>
+      <p class="status-line" id="opp-status"></p>
+      <div class="filter-row" id="opp-type-filters">
+        <button class="chip active" data-t="all">All types</button>
+        <button class="chip" data-t="internship">Internships</button>
+        <button class="chip" data-t="fellowship">Fellowships</button>
+        <button class="chip" data-t="entry">New grad &amp; entry</button>
+        <button class="chip" data-t="fulltime">Full-time</button>
+      </div>
+      <div class="filter-row" id="opp-area-filters"></div>
+      <div class="filter-row" id="opp-role-filters"></div>
+      <div class="filter-row" id="opp-filters">
+        <button class="chip active" data-f="active">Active</button>
+        <button class="chip" data-f="saved">Saved</button>
+        <button class="chip" data-f="applied">Applied</button>
+        <button class="chip" data-f="dismissed">Dismissed</button>
+      </div>
+      <div id="opp-list" class="list"></div>
+    </section>
+
+    <!-- Companies -->
+    <section id="view-companies" class="view" hidden>
+      <div id="companies-home">
+        <header class="view-head">
+          <div>
+            <h1>Companies</h1>
+            <p class="view-sub">Every company from your opportunities — click one to research it in depth</p>
+          </div>
+        </header>
+        <div id="company-list" class="company-grid"></div>
+      </div>
+
+      <div id="company-detail" hidden>
+        <button class="btn small" id="btn-back-companies">&larr; All companies</button>
+        <header class="view-head" style="margin-top:14px">
+          <div class="company-head">
+            <div id="company-logo"></div>
+            <div>
+              <h1 id="company-name"></h1>
+              <p class="view-sub" id="company-sub"></p>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="btn-company-leads">Find possible connections</button>
+            <button class="btn primary" id="btn-company-research">Run deep research</button>
+          </div>
+        </header>
+        <p class="status-line" id="company-status"></p>
+
+        <h2 class="section-title">Open roles here</h2>
+        <div id="company-roles" class="list"></div>
+
+        <h2 class="section-title">Research brief</h2>
+        <div id="company-brief" class="brief-box">No research yet. Click "Run deep research" to pull recent news, initiatives, and deals.</div>
+
+        <h2 class="section-title">Recent coverage</h2>
+        <div id="company-news" class="link-list"></div>
+
+        <h2 class="section-title" id="company-filings-title" hidden>SEC filings</h2>
+        <div id="company-filings" class="link-list"></div>
+
+        <h2 class="section-title">Possible connections</h2>
+        <p class="hint">People at this company who publicly share a school or organization with you. These are unverified leads from public profiles — not confirmed connections. Always verify before mentioning a link.</p>
+        <div id="company-leads" class="link-list"></div>
+      </div>
+    </section>
+
+    <!-- Learn -->
+    <section id="view-learn" class="view" hidden>
+      <div id="learn-home">
+        <header class="view-head">
+          <div>
+            <h1>Learn</h1>
+            <p class="view-sub">Courses built for the roles you want, and study plans for the classes you're taking</p>
+          </div>
+        </header>
+        <div class="form">
+          <div class="form-section">
+            <h3>Prepare for a role</h3>
+            <label>Target role
+              <div class="inline-row">
+                <input type="text" id="l-role" placeholder="e.g. Backend Software Engineer Intern">
+                <button class="btn primary" id="btn-gen-course">Generate course</button>
+              </div>
+              <span class="hint">Builds a from-scratch curriculum of the bare-minimum concepts for the role, tailored to your profile and interests.</span>
+            </label>
+          </div>
+          <div class="form-section">
+            <h3>Master a class</h3>
+            <div class="btn-row">
+              <button class="btn" id="btn-import-syllabus">Import syllabus (PDF or text)</button>
+            </div>
+            <span class="hint">Turns your course syllabus into a guided, lesson-by-lesson study plan for the semester.</span>
+          </div>
+          <p class="status-line" id="learn-status"></p>
+        </div>
+        <h2 class="section-title">Your courses</h2>
+        <div id="course-list" class="list"></div>
+      </div>
+
+      <div id="learn-detail" hidden>
+        <button class="btn small" id="btn-back-courses">&larr; All courses</button>
+        <header class="view-head" style="margin-top:14px">
+          <div>
+            <h1 id="course-title"></h1>
+            <p class="view-sub" id="course-progress"></p>
+            <div class="progress" id="course-progress-bar" style="max-width:300px"><div class="progress-fill"></div></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="btn-write-all">Write all lessons</button>
+            <button class="btn" id="btn-review-course">Review flashcards</button>
+            <button class="btn danger" id="btn-delete-course">Delete course</button>
+          </div>
+        </header>
+        <div id="lesson-outline"></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="view-settings" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Settings</h1>
+          <p class="view-sub">API keys, follow-up timing, and job sources</p>
+        </div>
+      </header>
+      <div class="form">
+        <div class="form-section">
+          <h3>AI integration</h3>
+          <label>Anthropic API key
+            <input type="password" id="s-anthropic" placeholder="sk-ant-...">
+            <span class="hint">Enables contact research and email drafting. Get a key at console.anthropic.com.</span>
+          </label>
+          <label>SerpAPI key
+            <input type="password" id="s-serp" placeholder="Optional">
+            <span class="hint">Optional. Powers Google Jobs and LinkedIn people searches (100 free/month, serpapi.com). Without it, company research and people leads fall back to Claude's built-in web search.</span>
+          </label>
+          <label>YouTube Data API key
+            <input type="password" id="s-youtube" placeholder="Optional, free">
+            <span class="hint">Optional. Links each lesson to real videos instead of a YouTube search. Free key from console.cloud.google.com.</span>
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>Follow-ups</h3>
+          <label>Follow-up window (days)
+            <input type="number" id="s-days" min="1" max="90">
+            <span class="hint">Contacts you emailed get flagged after this many days without a reply.</span>
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>Job sources</h3>
+          <label>Keywords
+            <input type="text" id="s-keywords" placeholder="software engineer, financial analyst, private equity">
+            <span class="hint">Comma-separated. A posting must match at least one keyword. These also become the role filter chips.</span>
+          </label>
+          <label>Preferred area
+            <input type="text" id="s-location" placeholder="New York, NY">
+            <span class="hint">Used for Google Jobs searches so postings skew toward your area.</span>
+          </label>
+          <label>Greenhouse companies
+            <input type="text" id="s-greenhouse">
+            <span class="hint">Comma-separated board slugs, e.g. stripe, anthropic.</span>
+          </label>
+          <label>Lever companies
+            <input type="text" id="s-lever">
+            <span class="hint">Comma-separated board slugs, e.g. plaid, ramp.</span>
+          </label>
+          <label>Ashby companies
+            <input type="text" id="s-ashby">
+            <span class="hint">Comma-separated board slugs, e.g. ramp, linear. Many newer startups use Ashby.</span>
+          </label>
+          <label>SmartRecruiters companies
+            <input type="text" id="s-smartrecruiters">
+            <span class="hint">Comma-separated company identifiers, e.g. Visa, Bosch.</span>
+          </label>
+          <label>Workable companies
+            <input type="text" id="s-workable">
+            <span class="hint">Comma-separated account slugs from apply.workable.com URLs.</span>
+          </label>
+          <label>Careers pages to watch
+            <textarea id="s-careers" rows="3" placeholder="https://careers.example.com/openings&#10;one URL per line"></textarea>
+            <span class="hint">Any careers page, one URL per line. The AI reads each page on refresh and extracts open roles — works for companies not on any job board. Needs the Anthropic key.</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="s-hide-senior">
+            <span>Hide senior-level roles (senior, staff, lead, manager, director)</span>
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>More sources (optional, free keys)</h3>
+          <div class="two-col">
+            <label>USAJobs email <input type="email" id="s-usajobs-email" placeholder="Registered email"></label>
+            <label>USAJobs API key <input type="password" id="s-usajobs-key" placeholder="Optional"></label>
+          </div>
+          <span class="hint">Government internships and fellowships (Pathways, PMF). Free key at developer.usajobs.gov — the email you register with is required too.</span>
+          <div class="two-col">
+            <label>Adzuna app ID <input type="text" id="s-adzuna-id" placeholder="Optional"></label>
+            <label>Adzuna app key <input type="password" id="s-adzuna-key" placeholder="Optional"></label>
+          </div>
+          <span class="hint">Aggregated postings with salary data. Free at developer.adzuna.com.</span>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn primary" id="btn-save-settings">Save settings</button>
+          <span class="status-line" id="settings-status"></span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Flashcard review overlay -->
+  <div id="flashcards" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="fc-title">Review</h2>
+        <button class="btn-x" id="fc-close" aria-label="Close">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="flashcard" id="fc-card">
+          <div class="fc-label" id="fc-label">Question</div>
+          <div class="fc-text" id="fc-text"></div>
+        </div>
+        <div class="btn-row fc-controls">
+          <button class="btn" id="fc-prev">&larr; Previous</button>
+          <button class="btn primary" id="fc-flip">Show answer</button>
+          <button class="btn" id="fc-next">Next &rarr;</button>
+          <span class="spacer"></span>
+          <span class="status-line" id="fc-count"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact detail modal -->
+  <div id="modal" class="modal-backdrop" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="modal-title">Contact</h2>
+        <button class="btn-x" id="modal-close" aria-label="Close">&#10005;</button>
+      </div>
+      <div class="modal-body form">
+        <div class="two-col">
+          <label>Name <input type="text" id="m-name"></label>
+          <label>Email <input type="email" id="m-email"></label>
+        </div>
+        <div class="two-col">
+          <label>Company <input type="text" id="m-company"></label>
+          <label>Status
+            <select id="m-status">
+              <option value="emailed">Emailed</option>
+              <option value="replied">Replied</option>
+              <option value="needs_follow_up">Needs follow-up</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+        </div>
+        <label>Notes and pasted context
+          <textarea id="m-notes" rows="4" placeholder="Paste a LinkedIn bio, an article, or anything useful about this person"></textarea>
+        </label>
+        <div class="btn-row">
+          <button class="btn" id="m-research">Run AI research</button>
+          <button class="btn" id="m-draft">Draft email</button>
+          <span class="spacer"></span>
+          <button class="btn danger" id="m-delete" hidden>Delete</button>
+          <button class="btn primary" id="m-save">Save</button>
+        </div>
+        <div id="m-ai-out" class="ai-output" hidden>
+          <div class="ai-output-head">
+            <span id="m-ai-label">AI output</span>
+            <button class="btn small" id="m-copy">Copy</button>
+          </div>
+          <pre id="m-ai-text"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
