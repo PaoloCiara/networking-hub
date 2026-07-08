@@ -506,8 +506,6 @@ function openGlobalAssistant() {
     'I can see your profile, top matches, and courses. Ask me anything — where to focus this week, what to apply to next, or how to prep.');
 }
 
-$('#btn-assistant').addEventListener('click', openGlobalAssistant);
-
 // The popup bubble: reopen the current conversation if there is one,
 // otherwise start a global chat.
 $('#fab-assistant').addEventListener('click', () => {
@@ -1299,7 +1297,80 @@ $('#btn-resume-feedback').addEventListener('click', async e => {
   }
 });
 
-// Resume-focused assistant entry point on the profile page.
+// ── Documents ─────────────────────────────────────────────────────────────────
+
+$('#btn-save-resume').addEventListener('click', async e => {
+  await persistProfile();
+  e.target.textContent = 'Saved';
+  setTimeout(() => { e.target.textContent = 'Save resume'; }, 1500);
+});
+
+// Cover letter: pick a matched opportunity (best fits first) or paste any
+// posting; the letter is grounded in the saved resume.
+let lastCoverLetter = '';
+
+function fillCoverOppPicker() {
+  const sel = $('#cl-opp');
+  const chosen = sel.value;
+  const active = Object.values(opportunities)
+    .filter(o => o.status === 'new' || o.status === 'saved')
+    .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))
+    .slice(0, 40);
+  sel.innerHTML = '<option value="">Paste a posting manually…</option>';
+  for (const o of active) {
+    const opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = `${displayTitle(o)} — ${titleCase(o.company || '')}`
+      + (Number.isFinite(o.matchScore) ? ` (fit ${o.matchScore})` : '');
+    sel.appendChild(opt);
+  }
+  if (chosen && opportunities[chosen]) sel.value = chosen;
+}
+
+$('#cl-opp').addEventListener('change', () => {
+  const o = opportunities[$('#cl-opp').value];
+  if (!o) return;
+  $('#cl-job').value =
+    `${o.title} at ${o.company}\nLocation: ${o.location || 'unspecified'}\n\n${o.description || ''}`.trim();
+});
+
+$('#btn-gen-cl').addEventListener('click', async e => {
+  const jobText = $('#cl-job').value.trim();
+  if (!jobText) { $('#cl-status').textContent = 'Pick an opportunity or paste a posting first.'; return; }
+  busy(e.target, true);
+  $('#cl-status').textContent = 'Writing your cover letter from your resume and this posting…';
+  try {
+    await persistProfile(); // the letter should see the freshest resume text
+    lastCoverLetter = await window.api.ai.coverLetter(jobText, $('#cl-notes').value.trim());
+    $('#cl-out').innerHTML = mdToHtml(lastCoverLetter);
+    $('#cl-out').hidden = false;
+    $('#cl-actions').hidden = false;
+    $('#cl-status').textContent = '';
+  } catch (err) {
+    $('#cl-status').textContent = /API key not set/.test(err.message)
+      ? 'Add your Anthropic API key in Settings first.'
+      : err.message;
+  } finally {
+    busy(e.target, false);
+  }
+});
+
+$('#btn-cl-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(lastCoverLetter);
+  $('#btn-cl-copy').textContent = 'Copied';
+  setTimeout(() => { $('#btn-cl-copy').textContent = 'Copy'; }, 1500);
+});
+
+$('#btn-cl-chat').addEventListener('click', () => {
+  if (!lastCoverLetter) { $('#cl-status').textContent = 'Generate a letter first.'; return; }
+  openAssistant('Cover letter draft',
+    `Job posting:\n${$('#cl-job').value.slice(0, 5000)}\n\n` +
+    `Current cover letter draft:\n${lastCoverLetter.slice(0, 5000)}\n\n` +
+    `Resume:\n${$('#p-resume').value.slice(0, 5000)}`,
+    'I have your draft, the posting, and your resume. Tell me what to punch up, shorten, or reframe — or ask for a different angle entirely.');
+});
+
+// Resume-focused assistant entry point.
 $('#btn-resume-chat').addEventListener('click', () => {
   const resume = $('#p-resume').value;
   if (!resume.trim()) { $('#resume-status').textContent = 'Paste or import a resume first.'; return; }
@@ -1849,6 +1920,7 @@ async function refreshAll() {
   renderRoleChips();
   renderAreaChips();
   renderOpps();
+  fillCoverOppPicker();
   if (activeCompany) renderCompanyDetail();
   else renderCompanies();
 }

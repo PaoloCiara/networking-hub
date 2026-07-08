@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
     companyLeads:    (name) => ipcRenderer.invoke('ai:company-leads', name),
     resumeFeedback:  ()     => ipcRenderer.invoke('ai:resume-feedback'),
     chat: (context, messages) => ipcRenderer.invoke('ai:chat', { context, messages }),
+    coverLetter: (jobText, notes) => ipcRenderer.invoke('ai:cover-letter', { jobText, notes }),
     suggestKeywords: ()       => ipcRenderer.invoke('ai:suggest-keywords'),
     courseProjects:  (id)     => ipcRenderer.invoke('ai:course-projects', id),
   },

@@ -149,6 +149,28 @@ function repairJson(raw) {
   throw new Error('AI returned unparseable JSON.');
 }
 
+// Draft a tailored cover letter from the resume and a specific job posting.
+async function coverLetter(settings, profile, jobText, notes) {
+  if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
+  if (!profile.resumeText) throw new Error('No resume yet. Add one in Documents first.');
+
+  const system =
+    'You write cover letters for a college student that actually get read: ' +
+    '250-350 words, a direct opening (never "I am writing to express"), one ' +
+    'concrete hook connecting their real experience to this specific role ' +
+    'and company, a short proof paragraph with measurable achievements, and ' +
+    'a confident close with a clear next step. Honest — never invent ' +
+    'experience the resume does not support. Output Markdown: a one-line ' +
+    'subject, a greeting, the letter body, and a sign-off.';
+
+  const userText =
+    `Student profile:\n${profileSummary(profile)}\n\n` +
+    `Job posting:\n${(jobText || '').slice(0, 6000)}\n\n` +
+    `Extra direction from the student: ${notes || '(none)'}`;
+
+  return callClaude(settings.anthropicApiKey, system, userText, 1800);
+}
+
 // ── In-app assistant ──────────────────────────────────────────────────────────
 // Multi-turn chat grounded in whatever the user is looking at: a lesson, the
 // resume, a project spec, or the app as a whole. The context rides in the
@@ -663,7 +685,7 @@ async function forecastOpenings(settings, profile, opportunities) {
 }
 
 module.exports = {
-  researchContact, draftEmail, chatAssistant, suggestKeywords,
+  researchContact, draftEmail, chatAssistant, suggestKeywords, coverLetter,
   matchOpportunities, courseForRole, courseFromSyllabus, teachLesson,
   writeModuleLessons, quizForLesson, projectsForCourse,
   researchCompany, findConnectionLeads, recommendContacts, resumeFeedback,

@@ -566,3 +566,14 @@ body {
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; border: 2px solid var(--bg); }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Sectioned form grids (Profile, Settings, Documents) ─────────────────── */
+.form.form-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px; align-items: start; max-width: 860px;
+}
+.form.form-grid.wide { max-width: 1000px; }
+.section-desc {
+  font-size: 12.5px; color: var(--ink-3); font-weight: 400;
+  margin: -6px 0 0; line-height: 1.5;
+}

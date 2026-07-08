@@ -227,6 +227,10 @@ ipcMain.handle('ai:suggest-keywords', async () => {
   return { added: merged.length - existing.length, keywords: merged };
 });
 
+ipcMain.handle('ai:cover-letter', async (_e, { jobText, notes }) => {
+  return ai.coverLetter(db.getSettings(), db.getProfile(), jobText, notes);
+});
+
 ipcMain.handle('ai:course-projects', async (_e, courseId) => {
   const course = db.getCourses()[courseId];
   if (!course) throw new Error('Course not found.');

@@ -53,16 +53,15 @@
         <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 2L1 5.5 8 9l5.5-2.75V10H15V5.5L8 2zM4 8.8v2.7c0 1 1.8 2 4 2s4-1 4-2V8.8L8 10.8 4 8.8z"/></svg>
         Learn
       </button>
+      <button class="nav-item" data-view="documents">
+        <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M4 1h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm5 1v3h3L9 2zM5 8h6v1.2H5V8zm0 2.5h6v1.2H5v-1.2zm0-5h2.5v1.2H5V5.5z"/></svg>
+        Documents
+      </button>
       <button class="nav-item" data-view="settings">
         <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 10a2 2 0 100-4 2 2 0 000 4zm6-2c0 .3 0 .6-.1.9l1.3 1-1.2 2.1-1.6-.5c-.4.4-.9.7-1.5.9L10.5 14h-2.4l-.4-1.6a4.6 4.6 0 01-1.5-.9l-1.6.5-1.2-2.1 1.3-1a4.7 4.7 0 010-1.8l-1.3-1 1.2-2.1 1.6.5c.4-.4.9-.7 1.5-.9L8.1 2h2.4l.4 1.6c.6.2 1.1.5 1.5.9l1.6-.5 1.2 2.1-1.3 1c.1.3.1.6.1.9z"/></svg>
         Settings
       </button>
     </nav>
-
-    <button class="nav-item" id="btn-assistant">
-      <svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 1C4.1 1 1 3.6 1 6.8c0 1.8 1 3.4 2.5 4.5L3 15l3.4-2c.5.1 1 .1 1.6.1 3.9 0 7-2.6 7-5.8S11.9 1 8 1zM4.5 7.8a1 1 0 110-2 1 1 0 010 2zm3.5 0a1 1 0 110-2 1 1 0 010 2zm3.5 0a1 1 0 110-2 1 1 0 010 2z"/></svg>
-      Assistant
-    </button>
 
     <div class="sidebar-footer">
       <span class="ai-dot" id="ai-dot"></span>
@@ -114,13 +113,14 @@
       <header class="view-head">
         <div>
           <h1>My Profile</h1>
-          <p class="view-sub">Everything the AI uses to match jobs, draft emails, and build courses for you</p>
+          <p class="view-sub">Everything the AI uses to match jobs, draft emails, and build courses for you. Your resume lives in Documents.</p>
         </div>
         <button class="btn primary" id="btn-save-profile">Save profile</button>
       </header>
-      <div class="form">
+      <div class="form form-grid">
         <div class="form-section">
           <h3>Basics</h3>
+          <p class="section-desc">Who you are and where you're based.</p>
           <div class="two-col">
             <label>Full name <input type="text" id="p-name"></label>
             <label>Email <input type="email" id="p-email"></label>
@@ -133,15 +133,17 @@
 
         <div class="form-section">
           <h3>Education</h3>
+          <p class="section-desc">Drives matching toward internships and entry-level roles, and powers alumni searches.</p>
           <div class="two-col">
             <label>School <input type="text" id="p-school"></label>
             <label>Major <input type="text" id="p-major"></label>
           </div>
-          <label>Graduation year <input type="text" id="p-gradyear" placeholder="2027"></label>
+          <label>Graduation year <input type="text" id="p-gradyear" placeholder="2028"></label>
         </div>
 
         <div class="form-section">
           <h3>Links</h3>
+          <p class="section-desc">Public profiles the AI can reference in research and outreach.</p>
           <label>GitHub <input type="url" id="p-github" placeholder="https://github.com/username"></label>
           <label>LinkedIn <input type="url" id="p-linkedin" placeholder="https://linkedin.com/in/username"></label>
           <label>Portfolio or personal site <input type="url" id="p-portfolio"></label>
@@ -149,6 +151,7 @@
 
         <div class="form-section">
           <h3>Career direction</h3>
+          <p class="section-desc">Interests steer matching and course suggestions; goals shape every AI answer.</p>
           <label>Interests
             <input type="text" id="p-interests" placeholder="machine learning, fintech, product design">
             <span class="hint">Comma-separated. These drive job matching and course suggestions.</span>
@@ -157,9 +160,22 @@
             <textarea id="p-goals" rows="2" placeholder="e.g. Land a software engineering internship for summer 2027"></textarea>
           </label>
         </div>
+      </div>
+    </section>
 
+    <!-- Documents -->
+    <section id="view-documents" class="view" hidden>
+      <header class="view-head">
+        <div>
+          <h1>Documents</h1>
+          <p class="view-sub">Your resume, cover letters, and every draft you need to get out the door</p>
+        </div>
+        <button class="btn primary" id="btn-save-resume">Save resume</button>
+      </header>
+      <div class="form form-grid wide">
         <div class="form-section">
           <h3>Resume</h3>
+          <p class="section-desc">The single source of truth behind matching, research, courses, and cover letters.</p>
           <div class="btn-row">
             <button class="btn" id="btn-import-resume">Import from file (PDF or text)</button>
             <button class="btn" id="btn-resume-feedback">Get AI feedback</button>
@@ -167,12 +183,34 @@
             <span class="status-line" id="resume-status"></span>
           </div>
           <label>Resume text
-            <textarea id="p-resume" rows="10" placeholder="Paste your resume here, or import it from a file above"></textarea>
+            <textarea id="p-resume" rows="14" placeholder="Paste your resume here, or import it from a file above"></textarea>
             <span class="hint">Stored only on this Mac. Sent to the AI only when you run matching, research, or drafting.</span>
           </label>
           <div id="resume-feedback" class="brief-box" hidden></div>
         </div>
 
+        <div class="form-section">
+          <h3>Cover letter</h3>
+          <p class="section-desc">Pick one of your matched opportunities — or paste any posting — and get a letter grounded in your actual resume.</p>
+          <label>Opportunity
+            <select id="cl-opp"><option value="">Paste a posting manually…</option></select>
+          </label>
+          <label>Job posting
+            <textarea id="cl-job" rows="6" placeholder="Paste the job description here, or pick an opportunity above"></textarea>
+          </label>
+          <label>Anything to emphasize (optional)
+            <input type="text" id="cl-notes" placeholder="e.g. lead with the Eulerity recruiting platform work">
+          </label>
+          <div class="btn-row">
+            <button class="btn primary" id="btn-gen-cl">Generate cover letter</button>
+            <span class="status-line" id="cl-status"></span>
+          </div>
+          <div id="cl-out" class="brief-box" hidden></div>
+          <div id="cl-actions" class="btn-row" hidden>
+            <button class="btn small" id="btn-cl-copy">Copy</button>
+            <button class="btn small" id="btn-cl-chat">Refine with the assistant</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -343,70 +381,38 @@
       <header class="view-head">
         <div>
           <h1>Settings</h1>
-          <p class="view-sub">API keys, follow-up timing, and job sources</p>
+          <p class="view-sub">Keys, matching preferences, and where your opportunities come from</p>
         </div>
+        <button class="btn primary" id="btn-save-settings">Save settings</button>
       </header>
-      <div class="form">
+      <p class="status-line" id="settings-status"></p>
+      <div class="form form-grid wide">
         <div class="form-section">
-          <h3>AI integration</h3>
+          <h3>AI</h3>
+          <p class="section-desc">One key powers everything: matching, research, courses, the assistant, and web search.</p>
           <label>Anthropic API key
             <input type="password" id="s-anthropic" placeholder="sk-ant-...">
-            <span class="hint">Enables contact research and email drafting. Get a key at console.anthropic.com.</span>
-          </label>
-          <label>SerpAPI key
-            <input type="password" id="s-serp" placeholder="Optional">
-            <span class="hint">Optional. Only powers the Google Jobs source now (100 free/month, serpapi.com) — all research and people searches run through Claude's built-in web search.</span>
+            <span class="hint">Required for all AI features. Get a key at console.anthropic.com.</span>
           </label>
           <label>YouTube Data API key
             <input type="password" id="s-youtube" placeholder="Optional, free">
-            <span class="hint">Optional. Links each lesson to real videos instead of a YouTube search. Free key from console.cloud.google.com.</span>
+            <span class="hint">Optional. Links each lesson to real videos instead of a YouTube search. Free at console.cloud.google.com.</span>
           </label>
         </div>
 
         <div class="form-section">
-          <h3>Follow-ups</h3>
-          <label>Follow-up window (days)
-            <input type="number" id="s-days" min="1" max="90">
-            <span class="hint">Contacts you emailed get flagged after this many days without a reply.</span>
-          </label>
-        </div>
-
-        <div class="form-section">
-          <h3>Job sources</h3>
+          <h3>Matching &amp; filters</h3>
+          <p class="section-desc">What the feed looks for and what it hides.</p>
           <label>Keywords
             <div class="inline-row">
               <input type="text" id="s-keywords" placeholder="software engineer, financial analyst, private equity">
               <button class="btn" id="btn-suggest-keywords">Suggest from resume</button>
             </div>
-            <span class="hint">Comma-separated. A posting must match at least one keyword; these also become the role filter chips. "Suggest from resume" has the AI add titles, sectors, and companies your resume supports.</span>
+            <span class="hint">Comma-separated; a posting must match at least one. These also become the role filter chips.</span>
           </label>
           <label>Preferred area
             <input type="text" id="s-location" placeholder="New York, NY">
-            <span class="hint">Used for Google Jobs searches so postings skew toward your area.</span>
-          </label>
-          <label>Greenhouse companies
-            <input type="text" id="s-greenhouse">
-            <span class="hint">Comma-separated board slugs, e.g. stripe, anthropic.</span>
-          </label>
-          <label>Lever companies
-            <input type="text" id="s-lever">
-            <span class="hint">Comma-separated board slugs, e.g. plaid, ramp.</span>
-          </label>
-          <label>Ashby companies
-            <input type="text" id="s-ashby">
-            <span class="hint">Comma-separated board slugs, e.g. ramp, linear. Many newer startups use Ashby.</span>
-          </label>
-          <label>SmartRecruiters companies
-            <input type="text" id="s-smartrecruiters">
-            <span class="hint">Comma-separated company identifiers, e.g. Visa, Bosch.</span>
-          </label>
-          <label>Workable companies
-            <input type="text" id="s-workable">
-            <span class="hint">Comma-separated account slugs from apply.workable.com URLs.</span>
-          </label>
-          <label>Careers pages to watch
-            <textarea id="s-careers" rows="3" placeholder="https://careers.example.com/openings&#10;one URL per line"></textarea>
-            <span class="hint">Any careers page, one URL per line. The AI reads each page on refresh and extracts open roles — works for companies not on any job board. Needs the Anthropic key.</span>
+            <span class="hint">Skews keyword searches (Google Jobs, USAJobs, Adzuna) toward your area.</span>
           </label>
           <label class="check-row">
             <input type="checkbox" id="s-hide-senior">
@@ -415,12 +421,46 @@
         </div>
 
         <div class="form-section">
-          <h3>More sources (optional, free keys)</h3>
+          <h3>Job boards</h3>
+          <p class="section-desc">Company boards checked on every refresh — all free, no keys. Comma-separated slugs.</p>
+          <label>Greenhouse
+            <input type="text" id="s-greenhouse" placeholder="stripe, anthropic, figma">
+          </label>
+          <label>Lever
+            <input type="text" id="s-lever" placeholder="plaid, scaleai">
+          </label>
+          <label>Ashby
+            <input type="text" id="s-ashby" placeholder="ramp, linear">
+          </label>
+          <label>SmartRecruiters
+            <input type="text" id="s-smartrecruiters" placeholder="Visa, Bosch">
+          </label>
+          <label>Workable
+            <input type="text" id="s-workable" placeholder="account slugs from apply.workable.com URLs">
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>Watched careers pages</h3>
+          <p class="section-desc">For companies not on any job board — the AI reads each page on refresh and extracts open roles.</p>
+          <label>Page URLs
+            <textarea id="s-careers" rows="4" placeholder="https://careers.example.com/openings&#10;one URL per line"></textarea>
+            <span class="hint">One URL per line. Needs the Anthropic key.</span>
+          </label>
+        </div>
+
+        <div class="form-section">
+          <h3>Extra sources (optional, free keys)</h3>
+          <p class="section-desc">Each key unlocks another feed on refresh.</p>
+          <label>SerpAPI key
+            <input type="password" id="s-serp" placeholder="Optional">
+            <span class="hint">Unlocks Google Jobs (100 free searches/month, serpapi.com).</span>
+          </label>
           <div class="two-col">
             <label>USAJobs email <input type="email" id="s-usajobs-email" placeholder="Registered email"></label>
             <label>USAJobs API key <input type="password" id="s-usajobs-key" placeholder="Optional"></label>
           </div>
-          <span class="hint">Government internships and fellowships (Pathways, PMF). Free key at developer.usajobs.gov — the email you register with is required too.</span>
+          <span class="hint">Government internships and fellowships (Pathways, PMF). Free at developer.usajobs.gov.</span>
           <div class="two-col">
             <label>Adzuna app ID <input type="text" id="s-adzuna-id" placeholder="Optional"></label>
             <label>Adzuna app key <input type="password" id="s-adzuna-key" placeholder="Optional"></label>
@@ -428,9 +468,13 @@
           <span class="hint">Aggregated postings with salary data. Free at developer.adzuna.com.</span>
         </div>
 
-        <div class="btn-row">
-          <button class="btn primary" id="btn-save-settings">Save settings</button>
-          <span class="status-line" id="settings-status"></span>
+        <div class="form-section">
+          <h3>Follow-ups</h3>
+          <p class="section-desc">When outreach without a reply comes back to your attention.</p>
+          <label>Follow-up window (days)
+            <input type="number" id="s-days" min="1" max="90">
+            <span class="hint">Contacts you emailed get flagged after this many days without a reply.</span>
+          </label>
         </div>
       </div>
     </section>
