@@ -1,9 +1,9 @@
 'use strict';
 
-// AI features: contact research synthesis and outreach-email drafting.
-// Both require an Anthropic API key from Settings. Web research additionally
-// uses SerpAPI when a key is present; otherwise drafting works from whatever
-// context the user typed in (pasted LinkedIn bio, notes, etc.).
+// AI features. Everything requires an Anthropic API key from Settings.
+// Web research (companies, people, mentions) runs through Claude's built-in
+// web_search tool on the same key; free RSS/EDGAR feeds provide grounding.
+// SerpAPI is only used by services/jobs.js for the Google Jobs engine.
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-5';
@@ -15,18 +15,20 @@ class MissingKeyError extends Error {
   }
 }
 
-// `expect` ('[' or '{') marks calls that must return bare JSON. Claude 5
-// models reject assistant-message prefill, so the requirement is restated at
-// the end of the user turn instead; extractJson strips any strays that slip
-// through. `webSearchUses` > 0 attaches Anthropic's server-side web_search
-// tool so Claude can research the open web itself (billed per search) —
-// the no-SerpAPI path for company research, leads, and scans.
-// Retries once on rate-limit/server errors.
+// `userText` is a plain string for one-shot calls, or a full message array
+// (multi-turn chat). `expect` ('[' or '{') marks calls that must return bare
+// JSON. Claude 5 models reject assistant-message prefill, so the requirement
+// is restated at the end of the user turn instead; extractJson strips any
+// strays that slip through. `webSearchUses` > 0 attaches Anthropic's
+// server-side web_search tool so Claude can research the open web itself
+// (billed per search). Retries once on rate-limit/server errors.
 async function callClaude(apiKey, system, userText, maxTokens = 1024, expect = '', webSearchUses = 0) {
-  if (expect) {
+  if (expect && typeof userText === 'string') {
     userText += `\n\nRespond with raw JSON starting with "${expect}" — no prose before it, no code fences.`;
   }
-  const messages = [{ role: 'user', content: userText }];
+  const messages = Array.isArray(userText)
+    ? userText.map(m => ({ role: m.role, content: m.content }))
+    : [{ role: 'user', content: userText }];
 
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(ANTHROPIC_URL, {
@@ -45,7 +47,9 @@ async function callClaude(apiKey, system, userText, maxTokens = 1024, expect = '
           ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webSearchUses }] }
           : {}),
       }),
-      signal: AbortSignal.timeout(webSearchUses > 0 ? 180000 : 90000),
+      // Long-form output (whole modules) needs time to stream out — scale
+      // the timeout with the requested size instead of a flat 90s.
+      signal: AbortSignal.timeout(webSearchUses > 0 ? 180000 : Math.max(90000, maxTokens * 20)),
     });
 
     if ([429, 500, 502, 503, 529].includes(res.status) && attempt === 0) {
@@ -61,39 +65,23 @@ async function callClaude(apiKey, system, userText, maxTokens = 1024, expect = '
   }
 }
 
-async function searchWeb(serpApiKey, query) {
-  const url = `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&num=8&api_key=${serpApiKey}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-  if (!res.ok) throw new Error(`SerpAPI error ${res.status}`);
-  const data = await res.json();
-  return (data.organic_results || []).slice(0, 8).map(r =>
-    `- ${r.title}: ${r.snippet || ''} (${r.link})`).join('\n');
-}
-
-// Research a contact: web search (if SerpAPI key set) + Claude synthesis.
+// Research a contact: Claude searches the web itself and synthesizes a brief.
 async function researchContact(settings, contact) {
   if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
 
-  let webContext = '';
-  if (settings.serpApiKey) {
-    const query = `"${contact.name}" ${contact.company || ''} interview OR announcement OR role`;
-    webContext = await searchWeb(settings.serpApiKey, query).catch(e => `(web search failed: ${e.message})`);
-  }
-
   const system =
-    'You are a research assistant for professional networking. Given raw search ' +
-    'snippets and notes about a person, produce a concise brief: current role, ' +
-    'recent public activity (interviews, posts, job changes), and 2-3 specific ' +
-    'conversation hooks for a networking email. Be factual; if information is ' +
-    'thin, say so rather than inventing details.';
+    'You are a research assistant for professional networking. Search the web ' +
+    'for the person, then produce a concise brief: current role, recent public ' +
+    'activity (interviews, posts, job changes), and 2-3 specific conversation ' +
+    'hooks for a networking email. Be factual; if information is thin, say so ' +
+    'rather than inventing details, and never confuse namesakes.';
 
   const userText =
     `Person: ${contact.name} <${contact.email}>\n` +
     `Company: ${contact.company || 'unknown'}\n` +
-    `My notes: ${contact.notes || '(none)'}\n\n` +
-    `Web search results:\n${webContext || '(no web search available — work from notes only)'}`;
+    `My notes: ${contact.notes || '(none)'}`;
 
-  return callClaude(settings.anthropicApiKey, system, userText);
+  return callClaude(settings.anthropicApiKey, system, userText, 1500, '', 3);
 }
 
 // Draft a personalized outreach email using the research brief.
@@ -161,6 +149,72 @@ function repairJson(raw) {
   throw new Error('AI returned unparseable JSON.');
 }
 
+// ── In-app assistant ──────────────────────────────────────────────────────────
+// Multi-turn chat grounded in whatever the user is looking at: a lesson, the
+// resume, a project spec, or the app as a whole. The context rides in the
+// system prompt (cached between turns), the conversation in the messages.
+
+async function chatAssistant(settings, context, messages) {
+  if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
+
+  const system =
+    'You are the built-in assistant of Networking Hub, a desktop app a ' +
+    'college student uses to track job opportunities, contacts, companies, ' +
+    'and AI-generated prep courses. Act as a sharp, encouraging tutor and ' +
+    'career coach: answer directly, explain concepts simply with concrete ' +
+    'examples, and suggest specific improvements rather than generalities. ' +
+    'Keep replies under 250 words unless the student asks you to go deeper. ' +
+    'Write Markdown. Ground every answer in the context below; if something ' +
+    'is outside it, say so and answer from general knowledge.\n\n' +
+    `Current context — ${context?.label || 'general'}:\n` +
+    (context?.text || '(none)').slice(0, 14000);
+
+  return callClaude(settings.anthropicApiKey, system, messages, 1500);
+}
+
+// Read the resume and propose job-search keywords: titles, sectors, and
+// specific companies worth targeting. Returns an array of strings.
+async function suggestKeywords(settings, profile, existing) {
+  if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
+  if (!profile.resumeText) throw new Error('No resume yet. Paste or import one in My Profile first.');
+
+  const system =
+    'You expand a student\'s job-search keywords from their resume. Suggest ' +
+    'what their experience actually supports: role titles (intern and ' +
+    'entry-level variants), sectors, and specific companies worth targeting. ' +
+    'Do not repeat existing keywords. Respond with ONLY a JSON array of ' +
+    'lowercase strings, max 8, most relevant first.';
+
+  const text = await callClaude(settings.anthropicApiKey, system,
+    `Existing keywords: ${existing.join(', ') || '(none)'}\n\n` +
+    `Profile:\n${profileSummary(profile)}`, 500, '[');
+  return extractJson(text).filter(k => typeof k === 'string' && k.trim());
+}
+
+// Portfolio-grade projects for an existing course (new courses get them in
+// the outline itself).
+async function projectsForCourse(settings, profile, course) {
+  if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
+
+  const outline = course.modules.map(m => m.title).join('; ');
+  const text = await callClaude(settings.anthropicApiKey, PROJECTS_SPEC,
+    `Course: ${course.title}\nModules: ${outline}\n\n` +
+    `Student profile:\n${profileSummary(profile) || '(none)'}\n\n` +
+    'Design the projects for this course.', 2500, '[');
+  return extractJson(text);
+}
+
+const PROJECTS_SPEC =
+  'You design hard, hands-on portfolio projects for a college student — the ' +
+  'kind that take a few weekends, force real engineering or analysis ' +
+  'decisions, and impress recruiters, not tutorial toys. Each project must ' +
+  'produce something demonstrable (deployed app, repo, backtest, memo). ' +
+  'Respond with ONLY a JSON array of 2-3 projects: [{"title": "...", ' +
+  '"difficulty": "challenging|hard", "brief": "2-3 sentences on what to ' +
+  'build and why it impresses", "steps": ["4-6 concrete milestones"], ' +
+  '"stretch": "one stretch goal", "resumeBullet": "the resume line this ' +
+  'earns, with a measurable claim"}].';
+
 // Pull structured postings out of careers-page text. Used by the generic
 // careers-page importer in services/jobs.js; returns [] without a key so a
 // feed refresh never hard-fails on this source.
@@ -209,12 +263,15 @@ async function matchOpportunities(settings, profile, opportunities) {
 
   const summary = profileSummary(profile) || '(empty profile)';
 
-  // Batch to keep each response comfortably inside the token limit —
-  // one oversized reply is what corrupts the JSON.
-  const pool = opportunities.slice(0, 120);
-  const scores = [];
-  for (let i = 0; i < pool.length; i += 30) {
-    const list = pool.slice(i, i + 30).map(o => ({
+  // Batch to keep each response comfortably inside the token limit — one
+  // oversized reply is what corrupts the JSON. Batches run in parallel, so
+  // a big feed matches in the time of a single call.
+  const pool = opportunities.slice(0, 150);
+  const batches = [];
+  for (let i = 0; i < pool.length; i += 30) batches.push(pool.slice(i, i + 30));
+
+  const results = await Promise.all(batches.map(batch => {
+    const list = batch.map(o => ({
       id: o.id,
       title: o.title,
       company: o.company,
@@ -224,10 +281,10 @@ async function matchOpportunities(settings, profile, opportunities) {
     const userText =
       `Candidate profile:\n${summary}\n\n` +
       `Postings:\n${JSON.stringify(list, null, 1)}`;
-    const text = await callClaude(settings.anthropicApiKey, system, userText, 4000, '[');
-    scores.push(...extractJson(text));
-  }
-  return scores;
+    return callClaude(settings.anthropicApiKey, system, userText, 4000, '[')
+      .then(extractJson);
+  }));
+  return results.flat();
 }
 
 // Generate a from-scratch curriculum for a target role.
@@ -238,9 +295,15 @@ async function courseForRole(settings, profile, role) {
     'You design compact, practical curricula for college students preparing ' +
     'for a specific job role. Cover the bare-minimum concepts needed to be ' +
     'competent, assuming the student starts from scratch. 3-5 modules, 3-5 ' +
-    'lessons each, ordered so each lesson builds on the last. Respond with ' +
-    'ONLY JSON: {"title": "...", "modules": [{"title": "...", "lessons": ' +
-    '[{"title": "...", "summary": "one sentence"}]}]}.';
+    'lessons each, ordered so each lesson builds on the last. Also include ' +
+    '2-3 hard, hands-on portfolio projects that apply the material — a few ' +
+    'weekends each, demonstrable output, resume-worthy; not tutorial toys. ' +
+    'Respond with ONLY JSON: {"title": "...", "modules": [{"title": "...", ' +
+    '"lessons": [{"title": "...", "summary": "one sentence"}]}], ' +
+    '"projects": [{"title": "...", "difficulty": "challenging|hard", ' +
+    '"brief": "2-3 sentences", "steps": ["4-6 concrete milestones"], ' +
+    '"stretch": "one stretch goal", "resumeBullet": "the resume line this ' +
+    'earns, with a measurable claim"}]}.';
 
   const userText =
     `Target role: ${role}\n\nStudent profile:\n${profileSummary(profile) || '(none)'}`;
@@ -257,9 +320,14 @@ async function courseFromSyllabus(settings, syllabusText, courseName) {
     'You turn a college course syllabus into a structured self-study plan. ' +
     'Extract the real topics and order from the syllabus, grouped into ' +
     'modules (by unit/week), each with concrete lessons a student can work ' +
-    'through to master the class. Respond with ONLY JSON: {"title": "...", ' +
+    'through to master the class. Also include 2-3 hard, hands-on projects ' +
+    'that apply the course material beyond the problem sets — demonstrable, ' +
+    'resume-worthy work. Respond with ONLY JSON: {"title": "...", ' +
     '"modules": [{"title": "...", "lessons": [{"title": "...", "summary": ' +
-    '"one sentence"}]}]}.';
+    '"one sentence"}]}], "projects": [{"title": "...", "difficulty": ' +
+    '"challenging|hard", "brief": "2-3 sentences", "steps": ["4-6 concrete ' +
+    'milestones"], "stretch": "one stretch goal", "resumeBullet": "the ' +
+    'resume line this earns"}]}.';
 
   const userText =
     `Course name: ${courseName || '(infer from syllabus)'}\n\n` +
@@ -269,22 +337,52 @@ async function courseFromSyllabus(settings, syllabusText, courseName) {
   return extractJson(text);
 }
 
+// Shared teaching style for single-lesson and whole-module generation.
+const LESSON_STYLE =
+  'You are a thorough, patient tutor for college students. Teach each lesson ' +
+  'from scratch and in depth: why it matters, the core concepts built up ' +
+  'step by step with concrete worked examples (fenced ``` code blocks for ' +
+  'code or calculations), a real-world application tied to the student\'s ' +
+  'target roles, common mistakes to avoid, and 3-4 practice questions with ' +
+  'answers at the very end. Write clean Markdown: ## section headings, ' +
+  'short paragraphs, bullet lists, **bold** for key terms. Aim for a deep ' +
+  '15-20 minute read per lesson — closer to a chapter than a summary.';
+
 // Write the full teaching content for one lesson.
 async function teachLesson(settings, courseTitle, moduleTitle, lesson) {
   if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
-
-  const system =
-    'You are a patient tutor for college students. Teach the requested lesson ' +
-    'from scratch: start with why it matters, explain the core concepts with ' +
-    'concrete examples, and end with 2-3 practice questions (with answers at ' +
-    'the very end). Use plain text with clear section headings and short ' +
-    'paragraphs. Aim for a focused 10-minute read, not a textbook chapter.';
 
   const userText =
     `Course: ${courseTitle}\nModule: ${moduleTitle}\n` +
     `Lesson: ${lesson.title}\nLesson summary: ${lesson.summary || ''}`;
 
-  return callClaude(settings.anthropicApiKey, system, userText, 4000);
+  return callClaude(settings.anthropicApiKey, LESSON_STYLE, userText, 6000);
+}
+
+// Write every lesson in a module in ONE call. Returns an array of Markdown
+// strings aligned with the `lessons` argument. Content is separated by
+// sentinel lines rather than JSON — long multi-line strings inside JSON get
+// mangled far more often than a simple delimiter does.
+async function writeModuleLessons(settings, courseTitle, moduleTitle, lessons) {
+  if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
+
+  const system =
+    LESSON_STYLE + '\n\nYou will be given several lessons to write in one ' +
+    'response. Before each lesson output exactly one line: ' +
+    '===LESSON=== {lesson number}\n' +
+    'then that lesson\'s full Markdown content. No text before the first ' +
+    'sentinel line. Write the lessons in the order given.';
+
+  const userText =
+    `Course: ${courseTitle}\nModule: ${moduleTitle}\n\nLessons to write:\n` +
+    lessons.map((l, i) => `${i + 1}. ${l.title} — ${l.summary || ''}`).join('\n');
+
+  const text = await callClaude(settings.anthropicApiKey, system, userText, 24000);
+  // Split on sentinel lines; anything before the first sentinel is preamble.
+  const first = text.search(/^===LESSON===/m);
+  const body = first >= 0 ? text.slice(first) : '';
+  const chunks = body.split(/^===LESSON===[^\n]*\n?/m).filter(c => c.trim());
+  return lessons.map((_, i) => (chunks[i] || '').trim() || null);
 }
 
 // Write a 5-question quiz for a lesson the student has read.
@@ -388,44 +486,36 @@ async function fetchEdgarFilings(companyName, contactEmail) {
 }
 
 // ── Company deep-dive ─────────────────────────────────────────────────────────
-// News (free RSS) + SEC filings (free EDGAR) + open-web context, synthesized
-// by Claude into a brief. Web context comes from SerpAPI when a key is set;
-// otherwise Claude researches the web itself via the built-in search tool.
+// News (free RSS) + SEC filings (free EDGAR) as grounding, then one Claude
+// call that fills the gaps with its own web searches.
 
 async function researchCompany(settings, companyName, contactEmail = '') {
   if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
 
-  const [news, edgar, web] = await Promise.all([
+  const [news, edgar] = await Promise.all([
     fetchNewsRss(`"${companyName}"`).catch(() => []),
     fetchEdgarFilings(companyName, contactEmail).catch(() => null),
-    settings.serpApiKey
-      ? searchWeb(settings.serpApiKey, `${companyName} company initiatives OR partnership OR product launch`)
-          .catch(e => `(search failed: ${e.message})`)
-      : Promise.resolve(''),
   ]);
 
   const system =
     'You brief a college student before they apply or reach out to a company. ' +
-    'Write: (1) What the company does, in two sentences. (2) Recent moves — ' +
-    'initiatives, deals, launches, funding — as a short bullet list, each ' +
-    'grounded in a source. (3) If SEC filings are listed, one bullet on what ' +
-    'the latest filings signal (segments, deals, risks worth mentioning in a ' +
-    'finance interview). (4) Two talking points the student could use in an ' +
-    'outreach email or interview. Plain text, clear headings. Only state ' +
-    'things supported by the provided results' +
-    ' or by your own web searches.';
+    'Use the provided news and filings, and search the web for anything they ' +
+    'miss (initiatives, deals, launches, funding, culture). Write in Markdown: ' +
+    '(1) What the company does, in two sentences. (2) Recent moves as a short ' +
+    'bullet list, each grounded in a source. (3) If SEC filings are listed, ' +
+    'one bullet on what the latest filings signal (segments, deals, risks ' +
+    'worth mentioning in a finance interview). (4) Two talking points the ' +
+    'student could use in an outreach email or interview. Only state things ' +
+    'supported by the provided results or your own searches.';
 
   const userText =
     `Company: ${companyName}\n\n` +
     `News results:\n${news.map(n => `- ${n.title} (${n.source}, ${n.date}) ${n.link}`).join('\n') || '(none)'}\n\n` +
     `SEC filings (EDGAR):\n${edgar
       ? edgar.filings.map(f => `- ${f.form} filed ${f.date}: ${f.title} ${f.url}`).join('\n')
-      : '(none found — likely private)'}\n\n` +
-    `Web results:\n${web || '(none — search the web yourself for recent initiatives, deals, and launches)'}`;
+      : '(none found — likely private)'}`;
 
-  // Without SerpAPI, give Claude up to 3 of its own web searches.
-  const brief = await callClaude(settings.anthropicApiKey, system, userText, 2000, '',
-    settings.serpApiKey ? 0 : 3);
+  const brief = await callClaude(settings.anthropicApiKey, system, userText, 2000, '', 3);
   return { brief, news, filings: edgar?.filings || [], ticker: edgar?.ticker || null };
 }
 
@@ -434,40 +524,25 @@ async function researchCompany(settings, companyName, contactEmail = '') {
 // actual LinkedIn connections — the UI must present them as such.
 async function findConnectionLeads(settings, profile, companyName) {
   if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
-
-  // Pull affiliations (schools, employers, clubs) out of the resume.
-  const extractSystem =
-    'Extract the schools, employers, and organizations from this resume. ' +
-    'Respond with ONLY a JSON array of strings, most distinctive first, max 5.';
-  const affiliationsText = await callClaude(
-    settings.anthropicApiKey, extractSystem,
-    profile.resumeText || `${profile.school || ''} ${profile.major || ''}`, 500, '[');
-  let affiliations = [];
-  try { affiliations = extractJson(affiliationsText).slice(0, 3); } catch { /* fall through */ }
-  if (affiliations.length === 0 && profile.school) affiliations = [profile.school];
-  if (affiliations.length === 0) return { leads: [], note: 'Add your school or resume to your profile first.' };
-
-  const system =
-    'You identify possible warm-connection leads from search results of public ' +
-    'LinkedIn profiles. For each plausible person, output name, their role if ' +
-    'visible, the shared affiliation, and the profile URL. Respond with ONLY a ' +
-    'JSON array: [{"name": "...", "role": "...", "sharedWith": "...", "url": ' +
-    '"..."}]. Only include real people from the results; empty array if none.';
-
-  let text;
-  if (settings.serpApiKey) {
-    const searches = await Promise.all(affiliations.map(a =>
-      searchWeb(settings.serpApiKey, `site:linkedin.com/in "${companyName}" "${a}"`).catch(() => '')));
-    text = await callClaude(settings.anthropicApiKey, system,
-      `Company: ${companyName}\nStudent affiliations: ${affiliations.join(', ')}\n\n` +
-      `Search results:\n${searches.filter(Boolean).join('\n') || '(none)'}`, 1500, '[');
-  } else {
-    // No SerpAPI — Claude runs the people searches itself.
-    text = await callClaude(settings.anthropicApiKey, system,
-      `Company: ${companyName}\nStudent affiliations: ${affiliations.join(', ')}\n\n` +
-      `Search the web (e.g. site:linkedin.com/in queries) for public profiles of people at ` +
-      `${companyName} who share one of these affiliations.`, 1500, '[', 4);
+  if (!profile.resumeText && !profile.school) {
+    return { leads: [], note: 'Add your school or resume to your profile first.' };
   }
+
+  // One call: Claude reads the profile, picks the distinctive affiliations
+  // (school, employers, clubs) itself, runs its own people searches, and
+  // returns ranked leads.
+  const system =
+    'You find possible warm-connection leads for a college student. From ' +
+    'their profile, identify their most distinctive affiliations (school, ' +
+    'past employers, programs), then search the web for public LinkedIn ' +
+    'profiles of people at the target company who share one ' +
+    '(site:linkedin.com/in queries work well). Respond with ONLY a JSON ' +
+    'array: [{"name": "...", "role": "...", "sharedWith": "...", "url": ' +
+    '"..."}]. Only real people found in your searches; empty array if none.';
+
+  const text = await callClaude(settings.anthropicApiKey, system,
+    `Target company: ${companyName}\n\nStudent profile:\n${profileSummary(profile)}`,
+    1500, '[', 4);
   let leads = [];
   try { leads = extractJson(text); } catch { /* none found */ }
   return { leads, note: null };
@@ -480,7 +555,7 @@ async function findConnectionLeads(settings, profile, companyName) {
 // plan the queries, then rank what came back. Results are public-web leads,
 // not confirmed connections; the UI must label them unverified.
 
-async function recommendContacts(settings, profile, opportunities, contacts) {
+async function recommendContacts(settings, profile, opportunities, contacts, priorSuggestions = []) {
   if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
 
   // Target the companies behind the strongest-fit active postings.
@@ -492,63 +567,32 @@ async function recommendContacts(settings, profile, opportunities, contacts) {
       .filter(Boolean)
   )].slice(0, 8);
 
-  const known = Object.values(contacts).map(c => c.name).filter(Boolean);
+  // Existing contacts AND already-suggested people are off the table, so
+  // every run adds fresh names instead of repeating the list.
+  const known = [
+    ...Object.values(contacts).map(c => c.name),
+    ...priorSuggestions.map(s => s.name),
+  ].filter(Boolean);
 
-  const rankSystem =
-    'You turn web search results of public LinkedIn profiles into outreach ' +
-    'suggestions for a college student. Keep only real individual people — ' +
-    'no company pages, job listings, or directories. Skip anyone in the ' +
-    '"already known" list. For each person give the connection angle, why ' +
-    'they are worth contacting, and a one-line personalized opener idea. ' +
-    'Respond with ONLY a JSON array, best prospects first, max 10: ' +
-    '[{"name": "...", "title": "...", "company": "...", "url": "...", ' +
-    '"angle": "...", "reason": "one sentence", "opener": "one line"}]. ' +
-    'Empty array if nothing usable.';
+  const system =
+    'You find people worth a cold outreach for a college student building a ' +
+    'professional network. Search the web (site:linkedin.com/in queries work ' +
+    'well) for shared-school alumni at the target companies, people in the ' +
+    'student\'s target roles, and university recruiters. Keep only real ' +
+    'individual people — no company pages, job listings, or directories. ' +
+    'Never include anyone on the "already known" list. For each person give ' +
+    'the connection angle, why they are worth contacting, and a one-line ' +
+    'personalized opener idea. Respond with ONLY a JSON array, best ' +
+    'prospects first, max 10: [{"name": "...", "title": "...", "company": ' +
+    '"...", "url": "...", "angle": "...", "reason": "one sentence", ' +
+    '"opener": "one line"}]. Empty array if nothing usable.';
 
-  const studentContext =
+  const text = await callClaude(settings.anthropicApiKey, system,
     `Student:\n${profileSummary(profile) || '(empty)'}\n\n` +
     `Target companies (best match first): ${targetCompanies.join(', ') || '(none yet)'}\n\n` +
-    `Already known: ${known.join(', ') || '(none)'}`;
-
-  // Without SerpAPI, Claude plans and runs its own people searches in one call.
-  if (!settings.serpApiKey) {
-    const text = await callClaude(settings.anthropicApiKey, rankSystem,
-      `${studentContext}\n\nSearch the web (site:linkedin.com/in queries work well) for ` +
-      'people worth a cold outreach: shared-school alumni at the target companies, ' +
-      'people in the student\'s target roles, and university recruiters.',
-      2500, '[', 5);
-    try { return extractJson(text); } catch { return []; }
-  }
-
-  const planSystem =
-    'You plan people searches for a college student building a professional ' +
-    'network. Given their profile and target companies, produce up to 4 ' +
-    'Google queries that will surface public LinkedIn profiles worth a cold ' +
-    'outreach: shared-school alumni at target companies, people in the ' +
-    'student\'s target roles, university recruiters. Every query must ' +
-    'include site:linkedin.com/in. Respond with ONLY a JSON array: ' +
-    '[{"q": "...", "angle": "short label, e.g. Union College alumni at Ramp"}].';
-
-  const planText = await callClaude(
-    settings.anthropicApiKey, planSystem,
-    `Student profile:\n${profileSummary(profile) || '(empty)'}\n\n` +
-    `Target companies (best match first): ${targetCompanies.join(', ') || '(none yet — use the profile alone)'}`,
-    800, '[');
-  const plans = extractJson(planText).slice(0, 4);
-  if (plans.length === 0) return [];
-
-  // Each search spends one SerpAPI credit; the plan is capped at 4.
-  const results = await Promise.all(plans.map(async p => ({
-    angle: p.angle || '',
-    hits: await searchWeb(settings.serpApiKey, p.q).catch(() => ''),
-  })));
-
-  const rankText = await callClaude(
-    settings.anthropicApiKey, rankSystem,
-    `${studentContext}\n\n` +
-    results.map(r => `Search angle: ${r.angle}\n${r.hits || '(no results)'}`).join('\n\n'),
-    2500, '[');
-  try { return extractJson(rankText); } catch { return []; }
+    `Already known (do not include): ${known.join(', ') || '(none)'}`,
+    2500, '[', 5);
+  try { return extractJson(text); } catch { return []; }
 }
 
 // ── Resume feedback ───────────────────────────────────────────────────────────
@@ -571,44 +615,6 @@ async function resumeFeedback(settings, profile) {
     `Grad year: ${profile.gradYear || '?'}\n\nResume:\n${profile.resumeText.slice(0, 8000)}`;
 
   return callClaude(settings.anthropicApiKey, system, userText, 2500);
-}
-
-// ── Web presence scan ─────────────────────────────────────────────────────────
-// Searches the open web for mentions of the student: articles, public
-// profiles, project pages.
-
-async function scanWebForMe(settings, profile) {
-  if (!settings.anthropicApiKey) throw new MissingKeyError('Anthropic');
-  if (!profile.name) throw new Error('Add your name to your profile first.');
-
-  const system =
-    'You filter web search results to find mentions of a specific student. ' +
-    'Given their profile, keep only results plausibly about THEM (not ' +
-    'namesakes) — check school, location, field. Respond with ONLY a JSON ' +
-    'array: [{"title": "...", "url": "...", "why": "one sentence on why this ' +
-    'looks like them and what it is"}]. Empty array if nothing matches.';
-
-  const who =
-    `Student: ${profile.name}, ${profile.school || ''} ${profile.major || ''}, ` +
-    `${profile.location || ''}\nGitHub: ${profile.github || '?'}`;
-
-  let text;
-  if (settings.serpApiKey) {
-    const queries = [
-      `"${profile.name}" ${profile.school || ''}`.trim(),
-      `"${profile.name}" ${(profile.interests || [])[0] || profile.major || ''}`.trim(),
-    ];
-    const results = await Promise.all(queries.map(q =>
-      searchWeb(settings.serpApiKey, q).catch(() => '')));
-    text = await callClaude(settings.anthropicApiKey, system,
-      `${who}\n\nSearch results:\n${results.filter(Boolean).join('\n') || '(none)'}`, 1500, '[');
-  } else {
-    // No SerpAPI — Claude searches for the student itself.
-    text = await callClaude(settings.anthropicApiKey, system,
-      `${who}\n\nSearch the web for pages that mention this student: articles, ` +
-      'public profiles, project pages, competition results.', 1500, '[', 3);
-  }
-  try { return extractJson(text); } catch { return []; }
 }
 
 // ── Opening forecast ──────────────────────────────────────────────────────────
@@ -657,8 +663,9 @@ async function forecastOpenings(settings, profile, opportunities) {
 }
 
 module.exports = {
-  researchContact, draftEmail,
-  matchOpportunities, courseForRole, courseFromSyllabus, teachLesson, quizForLesson,
-  researchCompany, findConnectionLeads, recommendContacts, resumeFeedback, scanWebForMe,
+  researchContact, draftEmail, chatAssistant, suggestKeywords,
+  matchOpportunities, courseForRole, courseFromSyllabus, teachLesson,
+  writeModuleLessons, quizForLesson, projectsForCourse,
+  researchCompany, findConnectionLeads, recommendContacts, resumeFeedback,
   forecastOpenings, extractPostingsFromPage,
 };

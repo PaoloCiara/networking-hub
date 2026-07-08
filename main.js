@@ -16,6 +16,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'Networking Hub',
+    titleBarStyle: 'hiddenInset', // traffic lights float over the sidebar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -121,12 +122,19 @@ ipcMain.handle('ai:draft', async (_e, { contact, research, tone }) => {
 });
 
 // Score active opportunities against the profile and persist the results.
+// Only unscored postings are sent — already-scored ones keep their result,
+// which keeps repeat clicks cheap. When everything is scored, one more click
+// re-scores the whole feed (useful after a profile update).
 ipcMain.handle('ai:match', async () => {
   const settings = db.getSettings();
   const profile = db.getProfile();
-  const opps = Object.values(db.getOpportunities())
+  const active = Object.values(db.getOpportunities())
     .filter(o => o.status === 'new' || o.status === 'saved');
-  if (opps.length === 0) return { matched: 0 };
+  if (active.length === 0) return { matched: 0, rescored: false };
+
+  const unscored = active.filter(o => !Number.isFinite(o.matchScore));
+  const rescored = unscored.length === 0;
+  const opps = rescored ? active : unscored;
 
   const scores = await ai.matchOpportunities(settings, profile, opps);
   const byId = Object.fromEntries(scores.map(s => [s.id, s]));
@@ -137,7 +145,7 @@ ipcMain.handle('ai:match', async () => {
     db.saveOpportunity({ ...opp, matchScore: s.score, matchReason: s.reason });
     matched++;
   }
-  return { matched };
+  return { matched, rescored };
 });
 
 ipcMain.handle('companies:list', () => db.getCompanies());
@@ -162,24 +170,68 @@ ipcMain.handle('ai:company-leads', async (_e, companyName) => {
   return { leads, note };
 });
 
+ipcMain.handle('chats:list', () => db.getChats());
+ipcMain.handle('chats:save', (_e, chat) => db.saveChat(chat));
+ipcMain.handle('chats:delete', (_e, id) => db.deleteChat(id));
+
 ipcMain.handle('contacts:suggestions', () => db.getContactSuggestions());
 ipcMain.handle('contacts:suggestions-save', (_e, record) => db.saveContactSuggestions(record));
 
 ipcMain.handle('ai:recommend-contacts', async () => {
-  const items = await ai.recommendContacts(
+  // New finds append to the existing list — suggestions only leave the list
+  // when the user dismisses them or adds them as contacts.
+  const prior = db.getContactSuggestions()?.items || [];
+  const fresh = await ai.recommendContacts(
     db.getSettings(), db.getProfile(),
-    Object.values(db.getOpportunities()), db.getContacts());
-  return db.saveContactSuggestions({ items, generatedAt: new Date().toISOString() });
+    Object.values(db.getOpportunities()), db.getContacts(), prior);
+
+  const seen = new Set(prior.map(s => (s.url || s.name || '').toLowerCase()));
+  const merged = [...prior];
+  for (const s of fresh) {
+    const key = (s.url || s.name || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(s);
+  }
+  return db.saveContactSuggestions({
+    items: merged.slice(0, 40),
+    generatedAt: new Date().toISOString(),
+    added: merged.length - prior.length,
+  });
 });
 
 ipcMain.handle('ai:resume-feedback', async () => {
   return ai.resumeFeedback(db.getSettings(), db.getProfile());
 });
 
-ipcMain.handle('ai:scan-me', async () => {
-  const mentions = await ai.scanWebForMe(db.getSettings(), db.getProfile());
-  db.saveProfile({ webMentions: mentions, webMentionsAt: new Date().toISOString() });
-  return mentions;
+// In-app assistant: context comes from whatever the user is looking at.
+ipcMain.handle('ai:chat', async (_e, { context, messages }) => {
+  return ai.chatAssistant(db.getSettings(), context, messages);
+});
+
+// Read the resume and add fitting titles/companies/sectors to jobKeywords.
+ipcMain.handle('ai:suggest-keywords', async () => {
+  const settings = db.getSettings();
+  const existing = settings.jobKeywords || [];
+  const fresh = await ai.suggestKeywords(settings, db.getProfile(), existing);
+
+  const have = new Set(existing.map(k => k.toLowerCase()));
+  const merged = [...existing];
+  for (const k of fresh) {
+    const key = k.toLowerCase().trim();
+    if (!key || have.has(key)) continue;
+    have.add(key);
+    merged.push(key);
+  }
+  db.saveSettings({ jobKeywords: merged.slice(0, 20) });
+  return { added: merged.length - existing.length, keywords: merged };
+});
+
+ipcMain.handle('ai:course-projects', async (_e, courseId) => {
+  const course = db.getCourses()[courseId];
+  if (!course) throw new Error('Course not found.');
+  course.projects = await ai.projectsForCourse(db.getSettings(), db.getProfile(), course);
+  return db.saveCourse(course);
 });
 
 ipcMain.handle('ai:course-role', async (_e, role) => {
@@ -203,6 +255,25 @@ ipcMain.handle('ai:lesson', async (_e, { courseId, moduleIdx, lessonIdx }) => {
   return content;
 });
 
+// Write every lesson in one module with a single AI call. `force` rewrites
+// lessons that already have content (used for whole-course regeneration).
+ipcMain.handle('ai:write-module', async (_e, { courseId, moduleIdx, force }) => {
+  const course = db.getCourses()[courseId];
+  if (!course) throw new Error('Course not found.');
+  const mod = course.modules[moduleIdx];
+  const targets = mod.lessons.filter(l => force || !l.content);
+  if (targets.length === 0) return { written: 0, total: 0 };
+
+  const contents = await ai.writeModuleLessons(db.getSettings(), course.title, mod.title, targets);
+  let written = 0;
+  targets.forEach((lesson, i) => {
+    if (contents[i]) { lesson.content = contents[i]; written++; }
+  });
+  if (written === 0) throw new Error('Module generation returned no lessons.');
+  db.saveCourse(course);
+  return { written, total: targets.length };
+});
+
 ipcMain.handle('ai:quiz', async (_e, { courseId, moduleIdx, lessonIdx }) => {
   const course = db.getCourses()[courseId];
   if (!course) throw new Error('Course not found.');
@@ -221,6 +292,7 @@ function saveOutlineAsCourse(outline, source, label) {
     title: outline.title || label || 'Untitled course',
     source,
     roleFor: source === 'role' ? label : null,  // ties the course back to job postings
+    projects: outline.projects || [],           // hands-on, resume-worthy builds
     modules: (outline.modules || []).map(m => ({
       title: m.title,
       lessons: (m.lessons || []).map(l => ({

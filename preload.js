@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('api', {
   companies: {
     list: () => ipcRenderer.invoke('companies:list'),
   },
+  chats: {
+    list:   ()     => ipcRenderer.invoke('chats:list'),
+    save:   (chat) => ipcRenderer.invoke('chats:save', chat),
+    delete: (id)   => ipcRenderer.invoke('chats:delete', id),
+  },
   forecast: {
     get:      () => ipcRenderer.invoke('forecast:get'),
     generate: () => ipcRenderer.invoke('ai:forecast'),
@@ -49,11 +54,15 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.invoke('ai:lesson', { courseId, moduleIdx, lessonIdx }),
     quiz: (courseId, moduleIdx, lessonIdx) =>
       ipcRenderer.invoke('ai:quiz', { courseId, moduleIdx, lessonIdx }),
+    writeModule: (courseId, moduleIdx, force) =>
+      ipcRenderer.invoke('ai:write-module', { courseId, moduleIdx, force }),
     companyResearch:   (name) => ipcRenderer.invoke('ai:company-research', name),
     recommendContacts: ()     => ipcRenderer.invoke('ai:recommend-contacts'),
     companyLeads:    (name) => ipcRenderer.invoke('ai:company-leads', name),
     resumeFeedback:  ()     => ipcRenderer.invoke('ai:resume-feedback'),
-    scanMe:          ()     => ipcRenderer.invoke('ai:scan-me'),
+    chat: (context, messages) => ipcRenderer.invoke('ai:chat', { context, messages }),
+    suggestKeywords: ()       => ipcRenderer.invoke('ai:suggest-keywords'),
+    courseProjects:  (id)     => ipcRenderer.invoke('ai:course-projects', id),
   },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   onContactsChanged: (cb) => ipcRenderer.on('contacts-changed', cb),

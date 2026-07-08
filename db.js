@@ -15,6 +15,7 @@ const DEFAULTS = {
   companies: {},       // keyed by normalized name — cached research and leads
   forecast: null,      // last AI prediction of upcoming openings
   contactSuggestions: null, // last AI-recommended people to reach out to
+  chats: {},           // saved assistant conversations, keyed by id
   profile: {
     name: '', email: '', phone: '', location: '',
     school: '', major: '', gradYear: '',
@@ -195,6 +196,32 @@ function saveCompany(company) {
   return db.companies[key];
 }
 
+// ── Saved assistant chats ─────────────────────────────────────────────────────
+
+function getChats() {
+  return load().chats;
+}
+
+function saveChat(chat) {
+  if (!chat || !chat.id) throw new Error('Chat requires an id.');
+  const db = load();
+  const existing = db.chats[chat.id] || {};
+  db.chats[chat.id] = {
+    ...existing,
+    ...chat,
+    updatedAt: new Date().toISOString(),
+    createdAt: existing.createdAt || new Date().toISOString(),
+  };
+  save();
+  return db.chats[chat.id];
+}
+
+function deleteChat(id) {
+  const db = load();
+  delete db.chats[id];
+  save();
+}
+
 // ── Contact suggestions ───────────────────────────────────────────────────────
 
 function getContactSuggestions() {
@@ -242,5 +269,6 @@ module.exports = {
   getCompanies, saveCompany, companyKey,
   getForecast, saveForecast,
   getContactSuggestions, saveContactSuggestions,
+  getChats, saveChat, deleteChat,
   getSettings, saveSettings,
 };

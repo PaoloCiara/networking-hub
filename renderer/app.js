@@ -25,6 +25,53 @@ const decodeEntities = s => { const t = document.createElement('textarea'); t.in
 // Toggle a button's loading spinner (see .btn.busy in styles.css).
 const busy = (btn, on) => { btn.disabled = on; btn.classList.toggle('busy', on); };
 
+// ── Markdown rendering ────────────────────────────────────────────────────────
+// AI content (lessons, briefs, feedback) arrives as Markdown. Render the
+// common subset — headings, bold/italic/code, lists, fenced blocks — into
+// HTML instead of showing raw ## markers. All text passes through esc()
+// first, so model output can't inject markup.
+function mdToHtml(md) {
+  let html = '';
+  let inList = false;
+  let inCode = false;
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+  const inline = s => esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|\s)\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  for (const line of (md || '').split('\n')) {
+    if (/^\s*```/.test(line)) {
+      closeList();
+      html += inCode ? '</code></pre>' : '<pre><code>';
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) { html += esc(line) + '\n'; continue; }
+
+    const heading = line.match(/^(#{1,4})\s+(.*)/);
+    if (heading) {
+      closeList();
+      const lvl = Math.min(heading[1].length + 2, 6); // # → h3 … #### → h6
+      html += `<h${lvl}>${inline(heading[2].replace(/#+\s*$/, ''))}</h${lvl}>`;
+      continue;
+    }
+    const bullet = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)/);
+    if (bullet) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${inline(bullet[1])}</li>`;
+      continue;
+    }
+    if (line.trim() === '') { closeList(); continue; }
+    closeList();
+    const hr = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line);
+    html += hr ? '<hr>' : `<p>${inline(line)}</p>`;
+  }
+  closeList();
+  if (inCode) html += '</code></pre>';
+  return html;
+}
+
 // ── Title casing ──────────────────────────────────────────────────────────────
 // Postings arrive in every style ("SOFTWARE ENGINEER", "analyst, private
 // credit"). Normalize for display while preserving acronyms and names that
@@ -130,7 +177,7 @@ function showView(name) {
 }
 
 $$('.nav-item').forEach(btn =>
-  btn.addEventListener('click', () => showView(btn.dataset.view)));
+  btn.addEventListener('click', () => { if (btn.dataset.view) showView(btn.dataset.view); }));
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -272,16 +319,204 @@ $('#btn-suggest-contacts').addEventListener('click', async e => {
   $('#suggest-status').textContent = 'Planning searches from your profile, running them, and ranking the results…';
   try {
     suggestions = await window.api.ai.recommendContacts();
-    $('#suggest-status').textContent = (suggestions.items || []).length === 0
-      ? 'No solid leads this round. Fetch and match more opportunities, then try again.'
-      : `Found ${suggestions.items.length} people worth a look.`;
     renderSuggestions();
+    const added = suggestions.added || 0;
+    $('#suggest-status').textContent = added === 0
+      ? 'No new leads this round — your existing suggestions are unchanged. Try again after matching more opportunities.'
+      : `Added ${added} new ${added === 1 ? 'person' : 'people'} to your list (${(suggestions.items || []).length} total).`;
   } catch (err) {
     $('#suggest-status').textContent = /API key not set/.test(err.message)
       ? 'Suggestions need both an Anthropic and a SerpAPI key — add them in Settings.'
       : `Suggestions failed: ${err.message}`;
   } finally {
     busy(e.target, false);
+  }
+});
+
+// ── Assistant chat ────────────────────────────────────────────────────────────
+// A context-aware chat panel. Whatever the user opened it from — a lesson,
+// the resume, a project, or the app at large — rides along as grounding in
+// the system prompt, so answers stay specific.
+
+let chatMessages = [];    // API history: [{role, content}]
+let chatContext = null;   // { label, text }
+let currentChatId = null; // set once saved — later turns auto-persist
+
+function addChatBubble(role, text) {
+  const el = document.createElement('div');
+  el.className = `chat-bubble chat-${role}`;
+  if (role === 'assistant') el.innerHTML = mdToHtml(text);
+  else el.textContent = text;
+  $('#as-msgs').appendChild(el);
+  $('#as-msgs').scrollTop = $('#as-msgs').scrollHeight;
+  return el;
+}
+
+function showChatView() {
+  $('#as-history-list').hidden = true;
+  $('#as-msgs').hidden = false;
+  $('#as-history').textContent = 'History';
+}
+
+function openAssistant(label, contextText, greeting) {
+  // Same context: keep the running conversation. New context: start fresh.
+  if (!chatContext || chatContext.text !== contextText) {
+    chatContext = { label, text: contextText };
+    chatMessages = [];
+    currentChatId = null;
+    $('#as-msgs').innerHTML = '';
+    addChatBubble('assistant', greeting || 'What can I help you with?');
+  }
+  $('#as-context').textContent = label;
+  showChatView();
+  $('#assistant').hidden = false;
+  $('#as-input').focus();
+}
+
+// ── Saved chats ───────────────────────────────────────────────────────────────
+// "Save" keeps the conversation (context included); every later turn in a
+// saved chat auto-persists. History lists them; clicking one resumes it.
+
+function chatTitle() {
+  const firstUser = chatMessages.find(m => m.role === 'user');
+  return (firstUser ? firstUser.content : chatContext?.label || 'Chat').slice(0, 60);
+}
+
+async function persistChat() {
+  if (!currentChatId) return;
+  await window.api.chats.save({
+    id: currentChatId,
+    title: chatTitle(),
+    context: chatContext,
+    messages: chatMessages,
+  });
+}
+
+$('#as-save').addEventListener('click', async e => {
+  if (chatMessages.length === 0) return;
+  if (!currentChatId) currentChatId = `chat-${Date.now()}`;
+  await persistChat();
+  e.target.textContent = 'Saved';
+  setTimeout(() => { e.target.textContent = 'Save'; }, 1500);
+});
+
+function loadChat(chat) {
+  chatContext = chat.context || null;
+  chatMessages = [...(chat.messages || [])];
+  currentChatId = chat.id;
+  $('#as-context').textContent = chat.context?.label || '';
+  $('#as-msgs').innerHTML = '';
+  chatMessages.forEach(m => addChatBubble(m.role, m.content));
+  showChatView();
+  $('#as-input').focus();
+}
+
+async function renderChatHistory() {
+  const list = $('#as-history-list');
+  const chats = await window.api.chats.list();
+  list.innerHTML = '';
+  const items = Object.values(chats)
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  if (items.length === 0) {
+    list.innerHTML = '<div class="empty">No saved chats yet. Click "Save" during a conversation to keep it here.</div>';
+    return;
+  }
+  for (const chat of items) {
+    const row = document.createElement('div');
+    row.className = 'chat-hist-item';
+    row.innerHTML = `
+      <div class="row-info">
+        <div class="row-title">${esc(chat.title || 'Chat')}</div>
+        <div class="row-meta">${esc(chat.context?.label || '')} · ${(chat.messages || []).length} messages · ${timeAgo(chat.updatedAt)}</div>
+      </div>`;
+    const del = document.createElement('button');
+    del.className = 'btn-x';
+    del.setAttribute('aria-label', 'Delete chat');
+    del.innerHTML = '&#10005;';
+    del.addEventListener('click', async e => {
+      e.stopPropagation();
+      await window.api.chats.delete(chat.id);
+      if (currentChatId === chat.id) currentChatId = null;
+      renderChatHistory();
+    });
+    row.appendChild(del);
+    row.addEventListener('click', () => loadChat(chat));
+    list.appendChild(row);
+  }
+}
+
+$('#as-history').addEventListener('click', async e => {
+  if (!$('#as-history-list').hidden) { showChatView(); return; }
+  await renderChatHistory();
+  $('#as-msgs').hidden = true;
+  $('#as-history-list').hidden = false;
+  e.target.textContent = 'Back to chat';
+});
+
+async function sendChat() {
+  const text = $('#as-input').value.trim();
+  if (!text || $('#as-send').disabled) return;
+  $('#as-input').value = '';
+  chatMessages.push({ role: 'user', content: text });
+  addChatBubble('user', text);
+  const pending = addChatBubble('assistant', 'Thinking…');
+  busy($('#as-send'), true);
+  try {
+    const reply = await window.api.ai.chat(chatContext, chatMessages);
+    chatMessages.push({ role: 'assistant', content: reply });
+    pending.innerHTML = mdToHtml(reply);
+    await persistChat(); // no-op until the chat has been saved once
+  } catch (err) {
+    chatMessages.pop(); // drop the failed turn so a retry sends clean history
+    pending.textContent = /API key not set/.test(err.message)
+      ? 'Add your Anthropic API key in Settings to chat.'
+      : `Error: ${err.message}`;
+  } finally {
+    busy($('#as-send'), false);
+    $('#as-msgs').scrollTop = $('#as-msgs').scrollHeight;
+    $('#as-input').focus();
+  }
+}
+
+$('#as-send').addEventListener('click', sendChat);
+$('#as-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+$('#as-close').addEventListener('click', () => { $('#assistant').hidden = true; });
+
+// Global entry point: sidebar button and the floating popup bubble, both
+// grounded in an app-state summary.
+function openGlobalAssistant() {
+  const active = Object.values(opportunities)
+    .filter(o => o.status === 'new' || o.status === 'saved');
+  const top = active
+    .filter(o => Number.isFinite(o.matchScore))
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 8)
+    .map(o => `- ${displayTitle(o)} at ${titleCase(o.company || '')} (fit ${o.matchScore})`);
+  const contextText =
+    `Profile:\nName: ${$('#p-name').value}\n` +
+    `School: ${$('#p-school').value}, ${$('#p-major').value}, class of ${$('#p-gradyear').value}\n` +
+    `Goals: ${$('#p-goals').value}\nInterests: ${$('#p-interests').value}\n\n` +
+    `App state: ${active.length} active opportunities, ` +
+    `${Object.keys(contacts).length} contacts, ${Object.keys(courses).length} courses.\n` +
+    `Top matches:\n${top.join('\n') || '(not matched yet)'}\n\n` +
+    `Resume:\n${$('#p-resume').value.slice(0, 5000)}`;
+  openAssistant('Your job hunt at a glance', contextText,
+    'I can see your profile, top matches, and courses. Ask me anything — where to focus this week, what to apply to next, or how to prep.');
+}
+
+$('#btn-assistant').addEventListener('click', openGlobalAssistant);
+
+// The popup bubble: reopen the current conversation if there is one,
+// otherwise start a global chat.
+$('#fab-assistant').addEventListener('click', () => {
+  if (chatContext && chatMessages.length > 0) {
+    showChatView();
+    $('#assistant').hidden = false;
+    $('#as-input').focus();
+  } else {
+    openGlobalAssistant();
   }
 });
 
@@ -308,6 +543,7 @@ $('#modal').addEventListener('click', e => { if (e.target === $('#modal')) close
 // Escape peels back one layer at a time: overlays first, then detail panes.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
+  if (!$('#assistant').hidden) { $('#assistant').hidden = true; return; }
   if (!$('#flashcards').hidden) { $('#flashcards').hidden = true; return; }
   if (!$('#modal').hidden) { closeModal(); return; }
   if (!$('#view-learn').hidden && !$('#learn-detail').hidden) { $('#btn-back-courses').click(); return; }
@@ -536,6 +772,7 @@ function fillOppDetail(detail, o) {
       await refreshLearn();
       showView('learn');
       openCourse(course.id);
+      $('#btn-write-all').click(); // write every lesson immediately, in parallel
     } catch (err) {
       gen.textContent = /API key not set/.test(err.message)
         ? 'Needs Anthropic key (Settings)'
@@ -746,10 +983,12 @@ $('#btn-match-opps').addEventListener('click', async e => {
   busy(e.target, true);
   $('#opp-status').textContent = 'Scoring postings against your profile with AI…';
   try {
-    const { matched } = await window.api.ai.match();
+    const { matched, rescored } = await window.api.ai.match();
     $('#opp-status').textContent = matched === 0
       ? 'No active postings to match. Fetch some first.'
-      : `Scored ${matched} postings. Sorted best-fit first — hover a score to see why.`;
+      : rescored
+        ? `Everything was already scored, so all ${matched} postings were re-scored fresh.`
+        : `Scored ${matched} new postings (already-scored ones kept their results). Sorted best-fit first.`;
     await refreshAll();
   } catch (err) {
     $('#opp-status').textContent = /API key not set/.test(err.message)
@@ -921,7 +1160,7 @@ function renderCompanyDetail() {
 
   const briefEl = $('#company-brief');
   if (rec?.brief) {
-    briefEl.textContent = rec.brief;
+    briefEl.innerHTML = mdToHtml(rec.brief);
     briefEl.classList.remove('placeholder');
   } else {
     briefEl.textContent = 'No research yet. Click "Run deep research" to pull recent news, initiatives, and deals.';
@@ -1009,18 +1248,10 @@ const PROFILE_FIELDS = {
   'p-goals': 'goals', 'p-resume': 'resumeText',
 };
 
-function renderMentions(mentions) {
-  const el = $('#me-mentions');
-  el.innerHTML = '';
-  if (!mentions || mentions.length === 0) return;
-  mentions.forEach(m => el.appendChild(linkItem(m.title, m.url, m.why)));
-}
-
 async function loadProfile() {
   const p = await window.api.profile.get();
   for (const [id, key] of Object.entries(PROFILE_FIELDS)) $(`#${id}`).value = p[key] || '';
   $('#p-interests').value = (p.interests || []).join(', ');
-  renderMentions(p.webMentions);
 }
 
 async function persistProfile() {
@@ -1056,7 +1287,7 @@ $('#btn-resume-feedback').addEventListener('click', async e => {
     // Save first so the review sees exactly what's on screen.
     await persistProfile();
     const feedback = await window.api.ai.resumeFeedback();
-    out.textContent = feedback;
+    out.innerHTML = mdToHtml(feedback);
     out.hidden = false;
     $('#resume-status').textContent = '';
   } catch (err) {
@@ -1068,22 +1299,16 @@ $('#btn-resume-feedback').addEventListener('click', async e => {
   }
 });
 
-$('#btn-scan-me').addEventListener('click', async e => {
-  busy(e.target, true);
-  $('#scan-status').textContent = 'Searching the web for mentions of you…';
-  try {
-    const mentions = await window.api.ai.scanMe();
-    renderMentions(mentions);
-    $('#scan-status').textContent = mentions.length === 0
-      ? 'No confident matches found — common for students early on. Publishing projects on GitHub or a personal site changes that fast.'
-      : `Found ${mentions.length} likely mention${mentions.length === 1 ? '' : 's'}.`;
-  } catch (err) {
-    $('#scan-status').textContent = /API key not set/.test(err.message)
-      ? 'This needs both API keys — add them in Settings.'
-      : err.message;
-  } finally {
-    busy(e.target, false);
-  }
+// Resume-focused assistant entry point on the profile page.
+$('#btn-resume-chat').addEventListener('click', () => {
+  const resume = $('#p-resume').value;
+  if (!resume.trim()) { $('#resume-status').textContent = 'Paste or import a resume first.'; return; }
+  const contextText =
+    `Goals: ${$('#p-goals').value || '(unspecified)'}\n` +
+    `Interests: ${$('#p-interests').value}\n` +
+    `Grad year: ${$('#p-gradyear').value}\n\nResume:\n${resume.slice(0, 10000)}`;
+  openAssistant('Your resume', contextText,
+    'I have your resume loaded. Ask about wording, what to add or cut, how to frame something — or paste a job posting and I\'ll tailor advice to it.');
 });
 
 // ── Learn ─────────────────────────────────────────────────────────────────────
@@ -1174,7 +1399,7 @@ function renderCourseDetail() {
             return;
           }
         }
-        contentEl.textContent = lesson.content;
+        contentEl.innerHTML = mdToHtml(lesson.content);
 
         const actions = document.createElement('div');
         actions.className = 'btn-row';
@@ -1223,6 +1448,18 @@ function renderCourseDetail() {
         });
         actions.appendChild(quizBtn);
 
+        const askBtn = document.createElement('button');
+        askBtn.className = 'btn small';
+        askBtn.textContent = 'Ask the assistant';
+        askBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          openAssistant(`Lesson: ${lesson.title}`,
+            (`Course: ${course.title}\nModule: ${mod.title}\nLesson: ${lesson.title}\n\n` +
+             (lesson.content || lesson.summary || '')).slice(0, 12000),
+            `I have "${lesson.title}" loaded. Ask me to explain anything here differently, walk through another example, or go deeper on a point.`);
+        });
+        actions.appendChild(askBtn);
+
         contentEl.appendChild(actions);
         contentEl.hidden = false;
       });
@@ -1230,6 +1467,67 @@ function renderCourseDetail() {
       modEl.appendChild(lessonEl);
     });
     outline.appendChild(modEl);
+  });
+
+  renderCourseProjects(course);
+}
+
+// Hands-on, resume-worthy projects attached to the course. New courses get
+// them from the outline; older ones can generate them here.
+function renderCourseProjects(course) {
+  const box = $('#course-projects');
+  box.innerHTML = '';
+
+  const projects = course.projects || [];
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No projects for this course yet.';
+    const gen = document.createElement('button');
+    gen.className = 'btn primary';
+    gen.style.marginTop = '10px';
+    gen.textContent = 'Generate projects';
+    gen.addEventListener('click', async () => {
+      busy(gen, true);
+      try {
+        await window.api.ai.courseProjects(course.id);
+        await refreshLearn();
+        renderCourseDetail();
+      } catch (err) {
+        gen.textContent = /API key not set/.test(err.message)
+          ? 'Needs Anthropic key'
+          : 'Failed — try again';
+        busy(gen, false);
+      }
+    });
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(gen);
+    box.appendChild(empty);
+    return;
+  }
+
+  projects.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.innerHTML = `
+      <div class="project-head">
+        <div class="row-title">${esc(p.title)}</div>
+        <span class="badge ${p.difficulty === 'hard' ? 'badge-needs_follow_up' : 'badge-saved'}">${esc(p.difficulty || 'challenging')}</span>
+      </div>
+      <p class="project-brief">${esc(p.brief || '')}</p>
+      ${(p.steps || []).length ? `<ol class="project-steps">${p.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
+      ${p.stretch ? `<p class="project-stretch"><strong>Stretch:</strong> ${esc(p.stretch)}</p>` : ''}
+      ${p.resumeBullet ? `<p class="project-bullet">${esc(p.resumeBullet)}</p>` : ''}
+    `;
+    const ask = document.createElement('button');
+    ask.className = 'btn small';
+    ask.textContent = 'Work on this with the assistant';
+    ask.addEventListener('click', () => openAssistant(`Project: ${p.title}`,
+      `Course: ${course.title}\nProject: ${p.title}\nDifficulty: ${p.difficulty || ''}\n` +
+      `Brief: ${p.brief || ''}\nMilestones: ${(p.steps || []).join(' | ')}\nStretch: ${p.stretch || ''}`,
+      `Let's build "${p.title}". Ask me how to start, get unstuck on a step, or review your approach — I'll keep the milestones in mind.`));
+    card.appendChild(ask);
+    box.appendChild(card);
   });
 }
 
@@ -1375,6 +1673,48 @@ $('#btn-delete-course').addEventListener('click', async () => {
   $('#btn-back-courses').click();
 });
 
+// Generate the whole course at once: one AI call per module, modules in
+// parallel — so the wall-clock cost is roughly a single call. If everything
+// is already written, offers a full rewrite (deeper, fresh content).
+$('#btn-write-all').addEventListener('click', async e => {
+  const courseId = activeCourseId;
+  const course = courses[courseId];
+  if (!course) return;
+
+  const missing = course.modules.reduce(
+    (n, m) => n + m.lessons.filter(l => !l.content).length, 0);
+  let force = false;
+  if (missing === 0) {
+    if (!confirm('Every lesson is already written. Rewrite the whole course with fresh, more detailed lessons?')) return;
+    force = true;
+  }
+
+  busy(e.target, true);
+  let written = 0;
+  let failedModules = 0;
+  let doneModules = 0;
+  const progress = () => {
+    $('#course-progress').textContent =
+      `Writing lessons — ${doneModules} of ${course.modules.length} modules done…`;
+  };
+  progress();
+
+  await Promise.all(course.modules.map((_, mi) =>
+    window.api.ai.writeModule(courseId, mi, force)
+      .then(r => { written += r.written; })
+      .catch(() => { failedModules++; })
+      .finally(() => { doneModules++; progress(); })));
+
+  await refreshLearn();
+  if (activeCourseId === courseId) {
+    renderCourseDetail();
+    $('#course-progress').textContent = failedModules > 0
+      ? `Wrote ${written} lessons; ${failedModules} module${failedModules > 1 ? 's' : ''} failed — click those lessons to write them individually.`
+      : `All ${written} lessons written — click any lesson to read it.`;
+  }
+  busy(e.target, false);
+});
+
 $('#btn-gen-course').addEventListener('click', async e => {
   const role = $('#l-role').value.trim();
   if (!role) { $('#learn-status').textContent = 'Type a target role first.'; return; }
@@ -1385,6 +1725,7 @@ $('#btn-gen-course').addEventListener('click', async e => {
     await refreshLearn();
     $('#learn-status').textContent = '';
     openCourse(course.id);
+    $('#btn-write-all').click(); // write every lesson immediately, in parallel
   } catch (err) {
     $('#learn-status').textContent = /API key not set/.test(err.message)
       ? 'Add your Anthropic API key in Settings to generate courses.'
@@ -1404,6 +1745,7 @@ $('#btn-import-syllabus').addEventListener('click', async e => {
     await refreshLearn();
     $('#learn-status').textContent = '';
     openCourse(course.id);
+    $('#btn-write-all').click(); // write every lesson immediately, in parallel
   } catch (err) {
     $('#learn-status').textContent = /API key not set/.test(err.message)
       ? 'Add your Anthropic API key in Settings to import syllabi.'
@@ -1471,6 +1813,27 @@ $('#btn-save-settings').addEventListener('click', async () => {
   setTimeout(() => { $('#settings-status').textContent = ''; }, 2000);
   await loadSettings();
   renderOpps();
+});
+
+// AI reads the resume and appends fitting titles/sectors/companies to the
+// keyword list (saved immediately — the field and role chips refresh).
+$('#btn-suggest-keywords').addEventListener('click', async e => {
+  busy(e.target, true);
+  $('#settings-status').textContent = 'Reading your resume for keywords…';
+  try {
+    const { added } = await window.api.ai.suggestKeywords();
+    await loadSettings();
+    $('#settings-status').textContent = added === 0
+      ? 'No new keywords — your list already covers the resume.'
+      : `Added ${added} keyword${added === 1 ? '' : 's'} from your resume.`;
+    renderOpps();
+  } catch (err) {
+    $('#settings-status').textContent = /API key not set/.test(err.message)
+      ? 'Add your Anthropic API key first.'
+      : err.message;
+  } finally {
+    busy(e.target, false);
+  }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

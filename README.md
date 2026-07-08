@@ -6,14 +6,14 @@ Built with Electron and the Anthropic API (Claude).
 
 ## Features
 
-- **Opportunity feed** — pulls postings from Greenhouse and Lever job boards, Hacker News "Who's Hiring", and Google Jobs (via SerpAPI), with filters for internships, fellowships, entry-level roles, and location. Auto-refreshes every 4 hours and sends a notification when strong fits appear.
-- **AI matching** — scores every posting 0-100 against your profile and resume, with a one-line reason per match.
-- **Profile & resume** — import a PDF resume, get AI feedback on it, and scan the web for your public mentions.
-- **Company deep dives** — one-click research briefs on any company: what they do, recent news and deals, and talking points for outreach.
-- **Suggested contacts** — AI plans people searches (shared-school alumni at your best-fit companies, target-role folks, recruiters), pulls public profiles, and drafts opener ideas. Leads are clearly labeled unverified.
+- **Opportunity feed** — postings from 12 sources: Greenhouse, Lever, Ashby, SmartRecruiters, and Workable boards, Hacker News "Who's Hiring", The Muse, Remotive, arbitrary careers pages (AI-extracted), plus Google Jobs, USAJobs, and Adzuna behind optional free keys. Filters for internships, fellowships, entry-level, and location; auto-refreshes every 4 hours and notifies on strong fits.
+- **AI matching** — scores every posting 0-100 against your profile and resume, in parallel batches, with a one-line reason per match.
+- **Built-in assistant** — a popup chat grounded in whatever you're looking at: a lesson, your resume, a project, or your whole job hunt. Conversations can be saved and resumed later.
+- **Company deep dives** — research briefs built from Google News RSS, SEC EDGAR filings (10-Ks/8-Ks for finance prep), and Claude's live web search.
+- **Suggested contacts** — AI web searches for shared-school alumni at your best-fit companies, target-role folks, and recruiters, with opener ideas. Leads append to a persistent list and are clearly labeled unverified.
 - **Contact CRM** — track outreach status, get follow-up reminders, and generate researched, personalized outreach emails.
 - **Forecast** — predicts which roles and programs open next, combining your feed's posting history with known recruiting cycles (tech internships, IB summer analyst timelines, and so on).
-- **Learn** — generates from-scratch curricula for any target role, or turns an uploaded course syllabus into guided lessons taught in-app.
+- **Learn** — generates full courses for any target role (every lesson written in one pass), guided lessons from uploaded syllabi, per-lesson quizzes and videos, flashcard review, and hard portfolio projects that each earn a resume line.
 
 ## Setup
 
