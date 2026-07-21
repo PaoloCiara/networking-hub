@@ -369,7 +369,21 @@ async function autoRefreshOpportunities() {
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
+// Brand the app as "Networking Hub" everywhere we can. Note: when launched in
+// dev mode (`npm start`), macOS reads the menu-bar and Dock *name* from the
+// Electron binary's own bundle, so those still say "Electron" — the packaged
+// app in dist/ carries the real name. Everything below fixes what dev mode
+// can control: app.name, the About panel, and the Dock icon.
+app.setName('Networking Hub');
+app.setAboutPanelOptions({
+  applicationName: 'Networking Hub',
+  applicationVersion: app.getVersion(),
+});
+
 app.whenReady().then(() => {
+  if (!app.isPackaged && process.platform === 'darwin') {
+    try { app.dock.setIcon(path.join(__dirname, 'build', 'icon-1024.png')); } catch { /* cosmetic only */ }
+  }
   createWindow();
   checkFollowUps();
   setInterval(checkFollowUps, 6 * 60 * 60 * 1000);

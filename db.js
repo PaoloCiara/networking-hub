@@ -1,7 +1,8 @@
 'use strict';
 
 // Single-file JSON store kept in Electron's per-user data directory
-// (~/Library/Application Support/networking-opportunity-hub/data.json on macOS).
+// (~/Library/Application Support/Networking Hub/data.json on macOS — the
+// folder is named after package.json's productName).
 // All reads/writes go through this module so the shape stays consistent.
 
 const fs = require('fs');
