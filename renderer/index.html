@@ -10,6 +10,10 @@
 </head>
 <body>
 
+  <!-- Frameless window (hiddenInset): the whole top strip drags the window,
+       not just the sidebar. Sits below panels so their controls stay clickable. -->
+  <div class="drag-strip"></div>
+
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">
@@ -408,7 +412,6 @@
           <div>
             <h1 id="course-title"></h1>
             <p class="view-sub" id="course-progress"></p>
-            <div class="progress" id="course-progress-bar" style="max-width:300px"><div class="progress-fill"></div></div>
           </div>
           <div class="btn-row">
             <button class="btn" id="btn-write-all">Write all lessons</button>
@@ -416,11 +419,17 @@
             <button class="btn danger" id="btn-delete-course">Delete course</button>
           </div>
         </header>
-        <div id="lesson-outline"></div>
-
-        <h2 class="section-title">Hands-on projects</h2>
-        <p class="hint">Harder, portfolio-grade builds that apply this course — each one is designed to earn a resume line.</p>
-        <div id="course-projects"></div>
+        <div class="learn-layout">
+          <div class="learn-main">
+            <div id="lesson-outline"></div>
+            <h2 class="section-title">Hands-on projects</h2>
+            <p class="hint">Harder, portfolio-grade builds that apply this course — each one is designed to earn a resume line.</p>
+            <div id="course-projects"></div>
+          </div>
+          <aside class="learn-rail">
+            <div class="rail-card" id="course-stats"></div>
+          </aside>
+        </div>
       </div>
     </section>
 

@@ -231,31 +231,44 @@ body {
 
 .module {
   border: 1px solid var(--line); border-radius: var(--radius);
-  margin-bottom: 12px; overflow: hidden;
+  margin-bottom: 12px; overflow: hidden; background: var(--bg);
 }
 .module-head {
-  padding: 11px 14px; background: var(--bg-2);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 11px 14px; background: var(--surface-low);
   font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--line);
 }
+.module-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.module-count {
+  font-size: 11px; font-weight: 600; color: var(--ink-2);
+  background: var(--surface-container); border-radius: var(--radius-full);
+  padding: 2px 9px; font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
 .lesson {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--surface-container);
 }
 .lesson:last-child { border-bottom: none; }
+/* LeetCode-style striping: children are [module-head, lesson, lesson, …],
+   so odd lessons are even children of the module. */
+.module > .lesson:nth-child(odd) { background: var(--surface-low); }
 .lesson-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; cursor: pointer; transition: background 0.12s;
 }
-.lesson-row:hover { background: var(--bg-2); }
-.lesson-check {
-  width: 16px; height: 16px; border-radius: 4px;
-  border: 1.5px solid var(--ink-3); flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; color: #fff; background: var(--bg);
+.lesson-row:hover { background: var(--surface-container); }
+.lesson-status { font-size: 19px; color: var(--outline); flex-shrink: 0; }
+.lesson-status.done {
+  color: var(--primary);
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'opsz' 20;
 }
-.lesson-check.done { background: var(--green); border-color: var(--green); }
-.lesson-title { flex: 1; font-size: 13px; font-weight: 500; }
+.lesson-row .tag-chip { flex-shrink: 0; }
+.chip-unwritten { background: var(--surface-container); color: var(--outline); }
+.lesson-title { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; }
 .lesson-title.done { color: var(--ink-3); text-decoration: line-through; }
-.lesson-summary { font-size: 11.5px; color: var(--ink-3); }
+.lesson-summary {
+  font-size: 11.5px; color: var(--ink-3); max-width: 38%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 .lesson-content {
   padding: 4px 14px 16px 40px; font-size: 13px; line-height: 1.65;
@@ -814,3 +827,21 @@ body {
   margin-top: 10px; font-size: 10.5px; color: var(--ink-3);
 }
 .hm-legend .hm-cell { width: 9px; height: 9px; }
+
+/* ── Window drag strip ───────────────────────────────────────────────────── */
+/* hiddenInset window: the whole top edge drags the window, not just the
+   sidebar. Sits below panels (z 60–90) so their controls stay clickable. */
+.drag-strip {
+  position: fixed; top: 0; left: 0; right: 0; height: 28px;
+  -webkit-app-region: drag; z-index: 40;
+}
+
+/* ── Course detail rail (per-module progress) ────────────────────────────── */
+.rail-mods { margin-top: 16px; display: flex; flex-direction: column; gap: 11px; }
+.rail-mod-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  font-size: 12px; color: var(--ink-2); margin-bottom: 5px;
+}
+.rail-mod-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rail-mod-head b { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); flex-shrink: 0; }
+.rail-mod .progress { margin-top: 0; }

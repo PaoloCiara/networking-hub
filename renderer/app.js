@@ -1560,6 +1560,27 @@ function renderLearnFilters() {
   }
 }
 
+// Shared progress ring: the number sits in the middle, percentage beside it.
+function ringWrapHTML(done, total) {
+  const pct = total > 0 ? done / total : 0;
+  const R = 34, C = 2 * Math.PI * R;
+  return `
+    <div class="ring-wrap">
+      <svg width="84" height="84" viewBox="0 0 84 84" role="img" aria-label="${done} of ${total} lessons complete">
+        <circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--surface-highest)" stroke-width="7"/>
+        <circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--primary)" stroke-width="7"
+          stroke-linecap="round" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"
+          transform="rotate(-90 42 42)"/>
+        <text x="42" y="41" text-anchor="middle" font-size="17" font-weight="700" fill="var(--on-surface)">${done}</text>
+        <text x="42" y="56" text-anchor="middle" font-size="9.5" fill="var(--outline)">/ ${total}</text>
+      </svg>
+      <div>
+        <div class="ring-num">${Math.round(pct * 100)}%</div>
+        <div class="ring-sub">lessons completed</div>
+      </div>
+    </div>`;
+}
+
 function renderLearnRail() {
   const cs = Object.values(courses);
   let done = 0, total = 0, quizzes = 0;
@@ -1579,24 +1600,9 @@ function renderLearnRail() {
       }
     }
   }
-  const pct = total > 0 ? done / total : 0;
-  const R = 34, C = 2 * Math.PI * R;
   $('#learn-stats').innerHTML = `
     <div class="rail-title">Progress</div>
-    <div class="ring-wrap">
-      <svg width="84" height="84" viewBox="0 0 84 84" role="img" aria-label="${done} of ${total} lessons complete">
-        <circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--surface-highest)" stroke-width="7"/>
-        <circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--primary)" stroke-width="7"
-          stroke-linecap="round" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"
-          transform="rotate(-90 42 42)"/>
-        <text x="42" y="41" text-anchor="middle" font-size="17" font-weight="700" fill="var(--on-surface)">${done}</text>
-        <text x="42" y="56" text-anchor="middle" font-size="9.5" fill="var(--outline)">/ ${total}</text>
-      </svg>
-      <div>
-        <div class="ring-num">${Math.round(pct * 100)}%</div>
-        <div class="ring-sub">lessons completed</div>
-      </div>
-    </div>
+    ${ringWrapHTML(done, total)}
     <div class="stat-rows">
       <div class="stat-row"><span class="sr-label"><span class="sr-dot" style="background:var(--tertiary-container)"></span>Role prep</span><b>${bySource.role[0]}/${bySource.role[1]}</b></div>
       <div class="stat-row"><span class="sr-label"><span class="sr-dot" style="background:var(--secondary-container)"></span>Syllabus</span><b>${bySource.syllabus[0]}/${bySource.syllabus[1]}</b></div>
@@ -1685,14 +1691,34 @@ function openCourse(id) {
   renderCourseDetail();
 }
 
+// Per-module stats rail beside the lesson outline, mirroring the Learn home.
+function renderCourseRail(course) {
+  const box = $('#course-stats');
+  const { done, total } = courseProgress(course);
+  const mods = course.modules.map((m, i) => {
+    const t = (m.lessons || []).length;
+    const d = (m.lessons || []).filter(l => l.done).length;
+    return `
+      <div class="rail-mod">
+        <div class="rail-mod-head"><span title="${esc(m.title)}">${i + 1}. ${esc(m.title)}</span><b>${d}/${t}</b></div>
+        <div class="progress"><div class="progress-fill" style="width:${t > 0 ? Math.round((d / t) * 100) : 0}%"></div></div>
+      </div>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="rail-title">Course progress</div>
+    ${ringWrapHTML(done, total)}
+    <div class="rail-mods">${mods}</div>
+  `;
+}
+
 function renderCourseDetail() {
   const course = courses[activeCourseId];
   if (!course) return;
   const { done, total } = courseProgress(course);
   $('#course-title').textContent = course.title;
-  $('#course-progress').textContent = `${done} of ${total} lessons complete`;
-  $('#course-progress-bar').firstElementChild.style.width =
-    `${total > 0 ? Math.round((done / total) * 100) : 0}%`;
+  $('#course-progress').textContent =
+    `${course.source === 'syllabus' ? 'Syllabus' : 'Role prep'} · ${done} of ${total} lessons complete`;
+  renderCourseRail(course);
 
   const outline = $('#lesson-outline');
   outline.innerHTML = '';
@@ -1700,15 +1726,23 @@ function renderCourseDetail() {
   course.modules.forEach((mod, mi) => {
     const modEl = document.createElement('div');
     modEl.className = 'module';
-    modEl.innerHTML = `<div class="module-head">${mi + 1}. ${esc(mod.title)}</div>`;
+    const mTotal = (mod.lessons || []).length;
+    const mDone = (mod.lessons || []).filter(l => l.done).length;
+    modEl.innerHTML = `
+      <div class="module-head">
+        <span class="module-name">${mi + 1}. ${esc(mod.title)}</span>
+        <span class="module-count">${mDone}/${mTotal}</span>
+      </div>`;
 
     mod.lessons.forEach((lesson, li) => {
       const lessonEl = document.createElement('div');
       lessonEl.className = 'lesson';
       lessonEl.innerHTML = `
         <div class="lesson-row">
-          <span class="lesson-check ${lesson.done ? 'done' : ''}">${lesson.done ? '&#10003;' : ''}</span>
+          <span class="msym lesson-status ${lesson.done ? 'done' : ''}">${lesson.done ? 'check_circle' : 'radio_button_unchecked'}</span>
           <span class="lesson-title ${lesson.done ? 'done' : ''}">${esc(lesson.title)}</span>
+          ${lesson.quiz?.length ? '<span class="tag-chip kind-role">Quiz</span>' : ''}
+          ${lesson.content ? '' : '<span class="tag-chip chip-unwritten">Unwritten</span>'}
           <span class="lesson-summary">${esc(lesson.summary || '')}</span>
         </div>
         <div class="lesson-content" hidden></div>
@@ -1724,6 +1758,7 @@ function renderCourseDetail() {
           contentEl.textContent = 'Writing this lesson for you…';
           try {
             lesson.content = await window.api.ai.lesson(course.id, mi, li);
+            lessonEl.querySelector('.chip-unwritten')?.remove();
           } catch (err) {
             contentEl.textContent = /API key not set/.test(err.message)
               ? 'Add your Anthropic API key in Settings to unlock lessons.'
