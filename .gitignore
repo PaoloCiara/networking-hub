@@ -2,3 +2,11 @@ node_modules/
 dist/
 .DS_Store
 npm-debug.log*
+
+# Never commit local data or secrets (defensive — these live outside the repo,
+# but guard against a stray copy landing in the project directory).
+data.json
+.env
+.env.*
+*.pem
+*.key

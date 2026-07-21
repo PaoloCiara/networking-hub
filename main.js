@@ -25,10 +25,22 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // External links open in the default browser, never inside the app window.
+  // External links open in the default browser, never inside the app window —
+  // and only real web links. Untrusted job/AI data must never be able to hand
+  // a javascript:, file:, or custom-protocol URL to the OS.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // The app only ever renders its own local file. Block any attempt to
+  // navigate the main frame elsewhere (e.g. injected window.location); send
+  // genuine web links to the browser instead.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url !== win.webContents.getURL()) {
+      event.preventDefault();
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    }
   });
 }
 
