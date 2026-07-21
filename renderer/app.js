@@ -213,6 +213,119 @@ function renderDashboard() {
   queue.forEach(c => $('#d-queue').appendChild(contactRow(c)));
 }
 
+// ── LinkedIn activity ─────────────────────────────────────────────────────────
+// A local tracker for LinkedIn outreach: messages sent/received and connection
+// requests either way, each carrying a status tag (Connected, Pending,
+// Responded, Awaiting reply). LinkedIn exposes no API for personal accounts,
+// so entries are logged by hand and stored on this Mac via localStorage.
+
+const LI_KEY = 'linkedinActivity';
+let liItems = [];
+try { liItems = JSON.parse(localStorage.getItem(LI_KEY) || '[]') || []; } catch { liItems = []; }
+
+const LI_TAGS = {
+  connected: 'Connected', pending: 'Pending',
+  responded: 'Responded', awaiting: 'Awaiting reply',
+};
+// Clicking a tag cycles the status in place — no form needed.
+const LI_CYCLE = {
+  connection: { pending: 'connected', connected: 'responded', responded: 'pending' },
+  message:    { awaiting: 'responded', responded: 'awaiting' },
+};
+
+const liPersist = () => localStorage.setItem(LI_KEY, JSON.stringify(liItems));
+
+function liItemRow(item) {
+  const row = document.createElement('div');
+  row.className = 'li-item';
+  const fallbackMeta = item.kind === 'message'
+    ? (item.dir === 'in' ? 'Incoming message' : 'Outgoing message')
+    : (item.dir === 'in' ? 'Received request' : 'Sent request');
+  row.innerHTML = `
+    <span class="msym li-dir ${item.dir === 'in' ? 'in' : ''}" title="${item.dir === 'in' ? 'Received' : 'Sent'}">${item.dir === 'in' ? 'south_west' : 'north_east'}</span>
+    <div class="row-info">
+      <div class="row-title">${esc(item.name)}${item.company ? ` <span class="li-co">· ${esc(item.company)}</span>` : ''}</div>
+      <div class="row-meta">${esc(item.note || fallbackMeta)} · ${timeAgo(item.at)}</div>
+    </div>
+    <button class="li-tag li-tag-${esc(item.status)}" title="Click to change status">${esc(LI_TAGS[item.status] || item.status)}</button>
+    <button class="btn-x" aria-label="Remove">&#10005;</button>
+  `;
+  row.querySelector('.li-tag').addEventListener('click', () => {
+    item.status = LI_CYCLE[item.kind]?.[item.status]
+      || (item.kind === 'message' ? 'responded' : 'pending');
+    liPersist();
+    renderLinkedIn();
+  });
+  row.querySelector('.btn-x').addEventListener('click', () => {
+    liItems = liItems.filter(x => x !== item);
+    liPersist();
+    renderLinkedIn();
+  });
+  return row;
+}
+
+function renderLinkedIn() {
+  const byDate = (a, b) => new Date(b.at || 0) - new Date(a.at || 0);
+  const msgs = liItems.filter(i => i.kind === 'message').sort(byDate);
+  const conns = liItems.filter(i => i.kind === 'connection').sort(byDate);
+
+  const msgBox = $('#li-messages');
+  msgBox.innerHTML = msgs.length ? '' : '<div class="li-empty">No messages logged. Use "Log activity" after you send or receive one.</div>';
+  msgs.forEach(i => msgBox.appendChild(liItemRow(i)));
+
+  const connBox = $('#li-connections');
+  connBox.innerHTML = conns.length ? '' : '<div class="li-empty">No connection requests logged yet.</div>';
+  conns.forEach(i => connBox.appendChild(liItemRow(i)));
+
+  $('#li-msg-count').textContent = msgs.length;
+  $('#li-conn-count').textContent = conns.length;
+
+  const pending = conns.filter(i => i.status === 'pending').length;
+  const awaiting = msgs.filter(i => i.status === 'awaiting').length;
+  const connected = conns.filter(i => i.status === 'connected' || i.status === 'responded').length;
+  $('#li-summary').textContent = liItems.length === 0
+    ? 'Track outreach, invites, and replies alongside the rest of your pipeline'
+    : [
+        `${connected} connected`,
+        `${pending} invite${pending === 1 ? '' : 's'} pending`,
+        `${awaiting} message${awaiting === 1 ? '' : 's'} awaiting reply`,
+      ].join(' · ');
+}
+
+$('#btn-li-open').addEventListener('click', () =>
+  window.api.openExternal($('#p-linkedin').value.trim() || 'https://www.linkedin.com/'));
+
+$('#btn-li-log').addEventListener('click', () => {
+  const form = $('#li-form');
+  form.hidden = !form.hidden;
+  if (!form.hidden) $('#li-name').focus();
+});
+$('#li-cancel').addEventListener('click', () => { $('#li-form').hidden = true; });
+
+// Sensible default status per activity type.
+$('#li-kind').addEventListener('change', () => {
+  $('#li-status').value = $('#li-kind').value.startsWith('connection') ? 'pending' : 'awaiting';
+});
+
+$('#li-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#li-name').value.trim();
+  if (!name) { $('#li-name').focus(); return; }
+  const [kind, dir] = $('#li-kind').value.split(':');
+  liItems.push({
+    id: `li-${Date.now()}`,
+    kind, dir, name,
+    company: $('#li-company').value.trim(),
+    note: $('#li-note').value.trim(),
+    status: $('#li-status').value,
+    at: new Date().toISOString(),
+  });
+  liPersist();
+  $('#li-name').value = $('#li-company').value = $('#li-note').value = '';
+  $('#li-form').hidden = true;
+  renderLinkedIn();
+});
+
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
 function contactRow(c) {
@@ -370,6 +483,7 @@ function openAssistant(label, contextText, greeting) {
   $('#as-context').textContent = label;
   showChatView();
   $('#assistant').hidden = false;
+  syncPanels();
   $('#as-input').focus();
 }
 
@@ -482,7 +596,7 @@ $('#as-send').addEventListener('click', sendChat);
 $('#as-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
-$('#as-close').addEventListener('click', () => { $('#assistant').hidden = true; });
+$('#as-close').addEventListener('click', () => { $('#assistant').hidden = true; syncPanels(); });
 
 // Global entry point: sidebar button and the floating popup bubble, both
 // grounded in an app-state summary.
@@ -512,6 +626,7 @@ $('#fab-assistant').addEventListener('click', () => {
   if (chatContext && chatMessages.length > 0) {
     showChatView();
     $('#assistant').hidden = false;
+    syncPanels();
     $('#as-input').focus();
   } else {
     openGlobalAssistant();
@@ -532,16 +647,24 @@ function openContactModal(email = null) {
   $('#m-delete').hidden = !c;
   $('#m-ai-out').hidden = true;
   $('#modal').hidden = false;
+  syncPanels();
 }
 
-function closeModal() { $('#modal').hidden = true; }
+// Panels never use a blocking backdrop. Body classes shift the main content
+// over (split-panel behavior) so the app stays interactive and readable
+// beside whatever panel is open.
+function syncPanels() {
+  document.body.classList.toggle('assistant-open', !$('#assistant').hidden);
+  document.body.classList.toggle('detail-open', !$('#modal').hidden);
+}
+
+function closeModal() { $('#modal').hidden = true; syncPanels(); }
 $('#modal-close').addEventListener('click', closeModal);
-$('#modal').addEventListener('click', e => { if (e.target === $('#modal')) closeModal(); });
 
 // Escape peels back one layer at a time: overlays first, then detail panes.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (!$('#assistant').hidden) { $('#assistant').hidden = true; return; }
+  if (!$('#assistant').hidden) { $('#assistant').hidden = true; syncPanels(); return; }
   if (!$('#flashcards').hidden) { $('#flashcards').hidden = true; return; }
   if (!$('#modal').hidden) { closeModal(); return; }
   if (!$('#view-learn').hidden && !$('#learn-detail').hidden) { $('#btn-back-courses').click(); return; }
@@ -1390,27 +1513,165 @@ function courseProgress(course) {
   return { done, total: lessons.length };
 }
 
+// LeetCode-style Learn home: a data-dense course table on the left, a stats
+// ring and study-activity heatmap in the right rail.
+
+let learnFilter = 'all';
+
+const localDay = d => {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+// Topic chips shown on each course row, derived from its module titles.
+function courseTags(course) {
+  const tags = [];
+  for (const m of (course.modules || []).slice(0, 3)) {
+    const t = (m.title || '').replace(/^[\d.:)\s]+/, '').split(/[:–—(]/)[0].trim();
+    if (t) tags.push(t.length > 24 ? t.slice(0, 23).trimEnd() + '…' : t);
+  }
+  return tags;
+}
+
+function courseMatchesFilter(course) {
+  const { done, total } = courseProgress(course);
+  switch (learnFilter) {
+    case 'progress': return total === 0 || done < total;
+    case 'complete': return total > 0 && done === total;
+    case 'role':     return course.source !== 'syllabus';
+    case 'syllabus': return course.source === 'syllabus';
+    default:         return true;
+  }
+}
+
+function renderLearnFilters() {
+  const bar = $('#learn-topic-filters');
+  bar.innerHTML = '';
+  const options = [
+    ['all', 'All'], ['progress', 'In progress'], ['complete', 'Completed'],
+    ['role', 'Role prep'], ['syllabus', 'Syllabus'],
+  ];
+  for (const [key, label] of options) {
+    const chip = document.createElement('button');
+    chip.className = `chip ${learnFilter === key ? 'active' : ''}`;
+    chip.textContent = label;
+    chip.addEventListener('click', () => { learnFilter = key; renderCourses(); });
+    bar.appendChild(chip);
+  }
+}
+
+function renderLearnRail() {
+  const cs = Object.values(courses);
+  let done = 0, total = 0, quizzes = 0;
+  const bySource = { role: [0, 0], syllabus: [0, 0] };
+  const perDay = new Map(); // local yyyy-mm-dd → lessons completed that day
+  for (const c of cs) {
+    const key = c.source === 'syllabus' ? 'syllabus' : 'role';
+    for (const m of c.modules || []) {
+      for (const l of m.lessons || []) {
+        total++; bySource[key][1]++;
+        if (l.done) { done++; bySource[key][0]++; }
+        if (l.quiz?.length) quizzes++;
+        if (l.done && l.doneAt) {
+          const day = localDay(l.doneAt);
+          perDay.set(day, (perDay.get(day) || 0) + 1);
+        }
+      }
+    }
+  }
+  const pct = total > 0 ? done / total : 0;
+  const R = 34, C = 2 * Math.PI * R;
+  $('#learn-stats').innerHTML = `
+    <div class="rail-title">Progress</div>
+    <div class="ring-wrap">
+      <svg width="84" height="84" viewBox="0 0 84 84" role="img" aria-label="${done} of ${total} lessons complete">
+        <circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--surface-highest)" stroke-width="7"/>
+        <circle cx="42" cy="42" r="${R}" fill="none" stroke="var(--primary)" stroke-width="7"
+          stroke-linecap="round" stroke-dasharray="${(pct * C).toFixed(1)} ${C.toFixed(1)}"
+          transform="rotate(-90 42 42)"/>
+        <text x="42" y="41" text-anchor="middle" font-size="17" font-weight="700" fill="var(--on-surface)">${done}</text>
+        <text x="42" y="56" text-anchor="middle" font-size="9.5" fill="var(--outline)">/ ${total}</text>
+      </svg>
+      <div>
+        <div class="ring-num">${Math.round(pct * 100)}%</div>
+        <div class="ring-sub">lessons completed</div>
+      </div>
+    </div>
+    <div class="stat-rows">
+      <div class="stat-row"><span class="sr-label"><span class="sr-dot" style="background:var(--tertiary-container)"></span>Role prep</span><b>${bySource.role[0]}/${bySource.role[1]}</b></div>
+      <div class="stat-row"><span class="sr-label"><span class="sr-dot" style="background:var(--secondary-container)"></span>Syllabus</span><b>${bySource.syllabus[0]}/${bySource.syllabus[1]}</b></div>
+      <div class="stat-row"><span class="sr-label"><span class="sr-dot" style="background:var(--primary)"></span>Quizzes generated</span><b>${quizzes}</b></div>
+      <div class="stat-row"><span class="sr-label"><span class="sr-dot" style="background:var(--accent-primary)"></span>Courses</span><b>${cs.length}</b></div>
+    </div>
+  `;
+  renderHeatmap(perDay);
+}
+
+// GitHub-style contribution heatmap of the last ~18 weeks of completed
+// lessons. Columns are weeks (Sunday-first), so the walk starts on the Sunday
+// WEEKS back and ends on the Saturday closing the current week.
+function renderHeatmap(perDay) {
+  const box = $('#learn-heatmap');
+  box.innerHTML = '';
+  const WEEKS = 18;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end = new Date(today); end.setDate(end.getDate() + (6 - end.getDay()));
+  const start = new Date(end); start.setDate(end.getDate() - WEEKS * 7 + 1);
+  let max = 0;
+  for (const v of perDay.values()) max = Math.max(max, v);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const cell = document.createElement('span');
+    cell.className = 'hm-cell';
+    if (d > today) {
+      cell.style.visibility = 'hidden';
+    } else {
+      const day = localDay(d);
+      const n = perDay.get(day) || 0;
+      if (n > 0) cell.classList.add(`hm-l${Math.min(4, Math.ceil((n / Math.max(max, 1)) * 4))}`);
+      cell.title = `${n} lesson${n === 1 ? '' : 's'} · ${day}`;
+    }
+    box.appendChild(cell);
+  }
+}
+
 function renderCourses() {
+  renderLearnFilters();
+  renderLearnRail();
   const list = $('#course-list');
   list.innerHTML = '';
   const rows = Object.values(courses)
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const visible = rows.filter(courseMatchesFilter);
+  // The table chrome only makes sense with rows in it.
+  list.className = visible.length ? 'course-table' : '';
   if (rows.length === 0) {
     list.innerHTML = '<div class="empty">No courses yet. Generate one for a target role, or import a class syllabus.</div>';
     return;
   }
-  for (const course of rows) {
+  if (visible.length === 0) {
+    list.innerHTML = '<div class="empty">Nothing matches this filter.</div>';
+    return;
+  }
+  for (const course of visible) {
     const { done, total } = courseProgress(course);
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const solved = total > 0 && done === total;
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'course-trow';
     row.innerHTML = `
-      <div class="avatar" style="background:${avatarColor(course.title)}">${esc(initials(course.title))}</div>
-      <div class="row-info">
-        <div class="row-title">${esc(course.title)}</div>
-        <div class="row-meta">${course.source === 'syllabus' ? 'From your syllabus' : 'Role preparation'} · ${done}/${total} lessons complete</div>
-        <div class="progress"><div class="progress-fill" style="width:${total > 0 ? Math.round((done / total) * 100) : 0}%"></div></div>
+      <span class="msym cr-status ${solved ? 'solved' : done > 0 ? 'attempted' : ''}">${solved ? 'check_circle' : done > 0 ? 'clock_loader_40' : 'radio_button_unchecked'}</span>
+      <div class="cr-main">
+        <div class="cr-title">${esc(course.title)}</div>
+        <div class="cr-tags">
+          <span class="tag-chip ${course.source === 'syllabus' ? 'kind-syllabus' : 'kind-role'}">${course.source === 'syllabus' ? 'Syllabus' : 'Role prep'}</span>
+          ${courseTags(course).map(t => `<span class="tag-chip">${esc(t)}</span>`).join('')}
+        </div>
       </div>
-      <span class="badge ${done === total && total > 0 ? 'badge-applied' : 'badge-new'}">${done === total && total > 0 ? 'Complete' : 'In progress'}</span>
+      <div class="cr-progress">
+        <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="cr-frac">${done}/${total} lessons</div>
+      </div>
+      <span class="cr-pct ${solved ? 'done' : ''}">${pct}%</span>
     `;
     row.addEventListener('click', () => openCourse(course.id));
     list.appendChild(row);
@@ -1481,6 +1742,7 @@ function renderCourseDetail() {
         doneBtn.addEventListener('click', async e => {
           e.stopPropagation();
           lesson.done = !lesson.done;
+          lesson.doneAt = lesson.done ? new Date().toISOString() : null; // feeds the Learn heatmap
           await window.api.courses.save(course);
           await refreshLearn();
           renderCourseDetail();
@@ -1726,9 +1988,6 @@ $('#fc-flip').addEventListener('click', () => { fcFlipped = !fcFlipped; renderFl
 $('#fc-card').addEventListener('click', () => { fcFlipped = !fcFlipped; renderFlashcard(); });
 $('#fc-prev').addEventListener('click', () => fcStep(-1));
 $('#fc-next').addEventListener('click', () => fcStep(1));
-$('#flashcards').addEventListener('click', e => {
-  if (e.target === $('#flashcards')) $('#flashcards').hidden = true;
-});
 
 $('#btn-back-courses').addEventListener('click', () => {
   activeCourseId = null;
@@ -1949,6 +2208,7 @@ function renderWhatsNew() {
   await loadProfile();
   await refreshLearn();
   await refreshAll();
+  renderLinkedIn();
   renderWhatsNew();
   renderForecast(await window.api.forecast.get());
   suggestions = await window.api.contacts.suggestions();

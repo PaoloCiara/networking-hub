@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <title>Networking Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -87,6 +90,51 @@
         <div class="stat-card"><span class="stat-num" id="d-opps">0</span><span class="stat-lbl">Open opportunities</span></div>
         <div class="stat-card"><span class="stat-num success" id="d-fits">0</span><span class="stat-lbl">Strong fits</span></div>
         <div class="stat-card"><span class="stat-num" id="d-applied">0</span><span class="stat-lbl">Applied</span></div>
+      </div>
+      <h2 class="section-title">LinkedIn activity</h2>
+      <div class="li-panel">
+        <div class="li-head">
+          <div class="li-brand">
+            <span class="li-mark">in</span>
+            <div>
+              <div class="li-name">LinkedIn</div>
+              <div class="li-sub" id="li-summary">Track outreach, invites, and replies alongside the rest of your pipeline</div>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn small" id="btn-li-open">Open LinkedIn</button>
+            <button class="btn small primary" id="btn-li-log">Log activity</button>
+          </div>
+        </div>
+        <form id="li-form" class="li-form" hidden>
+          <select id="li-kind">
+            <option value="message:in">Message received</option>
+            <option value="message:out">Message sent</option>
+            <option value="connection:out">Connection request sent</option>
+            <option value="connection:in">Connection request received</option>
+          </select>
+          <input type="text" id="li-name" placeholder="Person">
+          <input type="text" id="li-company" placeholder="Company (optional)">
+          <input type="text" id="li-note" class="li-note" placeholder="Note — e.g. asked about the SWE intern role">
+          <select id="li-status">
+            <option value="awaiting">Awaiting reply</option>
+            <option value="responded">Responded</option>
+            <option value="pending">Pending</option>
+            <option value="connected">Connected</option>
+          </select>
+          <button class="btn small primary" type="submit">Add</button>
+          <button class="btn small" type="button" id="li-cancel">Cancel</button>
+        </form>
+        <div class="li-grid">
+          <div class="li-col">
+            <div class="li-col-head"><span class="msym">forum</span> Messages <span class="li-count" id="li-msg-count">0</span></div>
+            <div id="li-messages" class="li-list"></div>
+          </div>
+          <div class="li-col">
+            <div class="li-col-head"><span class="msym">group_add</span> Connections <span class="li-count" id="li-conn-count">0</span></div>
+            <div id="li-connections" class="li-list"></div>
+          </div>
+        </div>
       </div>
       <h2 class="section-title">Top matches for you</h2>
       <div id="d-matches" class="list"></div>
@@ -330,28 +378,28 @@
             <p class="view-sub">Courses built for the roles you want, and study plans for the classes you're taking</p>
           </div>
         </header>
-        <div class="form">
-          <div class="form-section">
-            <h3>Prepare for a role</h3>
-            <label>Target role
-              <div class="inline-row">
-                <input type="text" id="l-role" placeholder="e.g. Backend Software Engineer Intern">
-                <button class="btn primary" id="btn-gen-course">Generate course</button>
-              </div>
-              <span class="hint">Builds a from-scratch curriculum of the bare-minimum concepts for the role, tailored to your profile and interests.</span>
-            </label>
-          </div>
-          <div class="form-section">
-            <h3>Master a class</h3>
-            <div class="btn-row">
-              <button class="btn" id="btn-import-syllabus">Import syllabus (PDF or text)</button>
+        <div class="learn-layout">
+          <div class="learn-main">
+            <div class="learn-toolbar">
+              <input type="text" id="l-role" placeholder="Target role — e.g. Backend Software Engineer Intern">
+              <button class="btn primary" id="btn-gen-course">Generate course</button>
+              <button class="btn" id="btn-import-syllabus">Import syllabus</button>
             </div>
-            <span class="hint">Turns your course syllabus into a guided, lesson-by-lesson study plan for the semester.</span>
+            <p class="status-line" id="learn-status"></p>
+            <div class="filter-row" id="learn-topic-filters"></div>
+            <div id="course-list"></div>
           </div>
-          <p class="status-line" id="learn-status"></p>
+          <aside class="learn-rail">
+            <div class="rail-card" id="learn-stats"></div>
+            <div class="rail-card">
+              <div class="rail-title">Study activity</div>
+              <div id="learn-heatmap" class="heatmap"></div>
+              <div class="hm-legend">Less
+                <span class="hm-cell"></span><span class="hm-cell hm-l1"></span><span class="hm-cell hm-l2"></span><span class="hm-cell hm-l3"></span><span class="hm-cell hm-l4"></span>
+              More</div>
+            </div>
+          </aside>
         </div>
-        <h2 class="section-title">Your courses</h2>
-        <div id="course-list" class="list"></div>
       </div>
 
       <div id="learn-detail" hidden>
@@ -506,37 +554,34 @@
     </div>
   </aside>
 
-  <!-- Flashcard review overlay -->
-  <div id="flashcards" class="modal-backdrop" hidden>
-    <div class="modal">
-      <div class="modal-head">
-        <h2 id="fc-title">Review</h2>
-        <button class="btn-x" id="fc-close" aria-label="Close">&#10005;</button>
+  <!-- Flashcard review — floating panel; the app stays usable behind it -->
+  <div id="flashcards" class="float-panel" hidden>
+    <div class="panel-head">
+      <h2 id="fc-title">Review</h2>
+      <button class="btn-x" id="fc-close" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="panel-body">
+      <div class="flashcard" id="fc-card">
+        <div class="fc-label" id="fc-label">Question</div>
+        <div class="fc-text" id="fc-text"></div>
       </div>
-      <div class="modal-body">
-        <div class="flashcard" id="fc-card">
-          <div class="fc-label" id="fc-label">Question</div>
-          <div class="fc-text" id="fc-text"></div>
-        </div>
-        <div class="btn-row fc-controls">
-          <button class="btn" id="fc-prev">&larr; Previous</button>
-          <button class="btn primary" id="fc-flip">Show answer</button>
-          <button class="btn" id="fc-next">Next &rarr;</button>
-          <span class="spacer"></span>
-          <span class="status-line" id="fc-count"></span>
-        </div>
+      <div class="btn-row fc-controls">
+        <button class="btn" id="fc-prev">&larr; Previous</button>
+        <button class="btn primary" id="fc-flip">Show answer</button>
+        <button class="btn" id="fc-next">Next &rarr;</button>
+        <span class="spacer"></span>
+        <span class="status-line" id="fc-count"></span>
       </div>
     </div>
   </div>
 
-  <!-- Contact detail modal -->
-  <div id="modal" class="modal-backdrop" hidden>
-    <div class="modal">
-      <div class="modal-head">
-        <h2 id="modal-title">Contact</h2>
-        <button class="btn-x" id="modal-close" aria-label="Close">&#10005;</button>
-      </div>
-      <div class="modal-body form">
+  <!-- Contact detail slide-over — no backdrop, the app stays interactive -->
+  <aside id="modal" class="side-panel" hidden>
+    <div class="panel-head">
+      <h2 id="modal-title">Contact</h2>
+      <button class="btn-x" id="modal-close" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="panel-body form">
         <div class="two-col">
           <label>Name <input type="text" id="m-name"></label>
           <label>Email <input type="email" id="m-email"></label>
@@ -569,9 +614,8 @@
           </div>
           <pre id="m-ai-text"></pre>
         </div>
-      </div>
     </div>
-  </div>
+  </aside>
 
   <script src="app.js"></script>
 </body>
