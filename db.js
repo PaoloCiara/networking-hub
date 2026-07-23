@@ -35,6 +35,8 @@ const DEFAULTS = {
     ashbyBoards: ['ramp', 'linear'],
     smartrecruitersBoards: [],
     workableBoards: [],
+    // Workday employers as "tenant:datacenter:site" (public CXS API, no key).
+    workdayBoards: ['blackrock:wd1:BlackRock_Professional', 'nvidia:wd5:NVIDIAExternalCareerSite'],
     careersPages: [],        // arbitrary careers-page URLs, AI-extracted
     usaJobsEmail: '',        // optional, free — developer.usajobs.gov
     usaJobsKey: '',

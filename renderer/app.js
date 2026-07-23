@@ -2140,6 +2140,7 @@ async function loadSettings() {
   $('#s-ashby').value      = (s.ashbyBoards || []).join(', ');
   $('#s-smartrecruiters').value = (s.smartrecruitersBoards || []).join(', ');
   $('#s-workable').value   = (s.workableBoards || []).join(', ');
+  $('#s-workday').value    = (s.workdayBoards || []).join(', ');
   $('#s-careers').value    = (s.careersPages || []).join('\n');
   $('#s-usajobs-email').value = s.usaJobsEmail || '';
   $('#s-usajobs-key').value   = s.usaJobsKey || '';
@@ -2166,6 +2167,7 @@ $('#btn-save-settings').addEventListener('click', async () => {
     ashbyBoards:      csv($('#s-ashby').value),
     smartrecruitersBoards: csv($('#s-smartrecruiters').value),
     workableBoards:   csv($('#s-workable').value),
+    workdayBoards:    csv($('#s-workday').value),
     careersPages:     $('#s-careers').value.split(/\n+/).map(u => u.trim()).filter(u => /^https?:\/\//.test(u)),
     usaJobsEmail:     $('#s-usajobs-email').value.trim(),
     usaJobsKey:       $('#s-usajobs-key').value.trim(),

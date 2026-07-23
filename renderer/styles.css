@@ -646,6 +646,7 @@ body {
   font-size: 12.5px; color: var(--ink-3); font-weight: 400;
   margin: -6px 0 0; line-height: 1.5;
 }
+.label-hint { font-weight: 400; color: var(--ink-3); font-size: 11.5px; }
 
 /* ── Material Symbols ────────────────────────────────────────────────────── */
 .msym {

@@ -131,6 +131,59 @@ async function fetchWorkable(slug, keywords) {
     }));
 }
 
+// ── Workday ───────────────────────────────────────────────────────────────────
+// Big finance/tech employers (BlackRock, NVIDIA, Capital One, Salesforce, …)
+// run careers on Workday. Its CXS search endpoint is public JSON — no key.
+// Each board is configured as "tenant:datacenter:site", e.g.
+//   "blackrock:wd1:BlackRock_Professional", "nvidia:wd5:NVIDIAExternalCareerSite".
+// The datacenter (wd1/wd3/wd5/…) and site slug come from the careers URL.
+
+function parseWorkdayBoard(entry) {
+  const [tenant, dc, site] = (entry || '').split(':').map(s => s.trim());
+  if (!tenant || !dc || !site) return null;
+  return { tenant, dc, site };
+}
+
+async function fetchWorkday(entry, keywords) {
+  const cfg = parseWorkdayBoard(entry);
+  if (!cfg) throw new Error(`bad board "${entry}" — expected tenant:datacenter:site`);
+  const { tenant, dc, site } = cfg;
+  const base = `https://${tenant}.${dc}.myworkdayjobs.com`;
+  const api = `${base}/wday/cxs/${tenant}/${site}/jobs`;
+
+  // Workday searches server-side, so run one search per keyword (like the other
+  // query-based sources) and merge. Unauthenticated and unmetered, so no quota
+  // juggling needed.
+  const searches = keywords.length ? keywords : [''];
+  const byId = new Map();
+  for (const kw of searches) {
+    const res = await fetch(api, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: kw }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const data = await res.json();
+    for (const j of (data.jobPostings || [])) {
+      if (!j.externalPath) continue;
+      const id = `wd-${tenant}-${(j.bulletFields && j.bulletFields[0]) || j.externalPath}`;
+      if (byId.has(id)) continue;
+      byId.set(id, {
+        id,
+        source: 'Workday',
+        company: cleanCompany(tenant),
+        title: cleanTitle(j.title || ''),
+        location: j.locationsText || '',
+        url: `${base}/en-US/${site}${j.externalPath}`,
+        postedAt: null, // Workday reports relative text only ("Posted Today")
+        kind: 'job',
+      });
+    }
+  }
+  return [...byId.values()];
+}
+
 // ── The Muse ──────────────────────────────────────────────────────────────────
 // Free aggregator API. Pull the internship and entry-level pages and filter
 // by the user's keywords locally.
@@ -349,7 +402,8 @@ async function fetchGoogleJobs(serpApiKey, keyword, location) {
 async function fetchAllOpportunities(settings) {
   const {
     greenhouseBoards = [], leverBoards = [], ashbyBoards = [],
-    smartrecruitersBoards = [], workableBoards = [], careersPages = [],
+    smartrecruitersBoards = [], workableBoards = [], workdayBoards = [],
+    careersPages = [],
     jobKeywords = [], serpApiKey = '', jobLocation = '',
     usaJobsEmail = '', usaJobsKey = '', adzunaAppId = '', adzunaAppKey = '',
   } = settings;
@@ -370,6 +424,7 @@ async function fetchAllOpportunities(settings) {
     ...ashbyBoards.map(s => fetchAshby(s, jobKeywords).catch(fail(`Ashby/${s}`))),
     ...smartrecruitersBoards.map(s => fetchSmartRecruiters(s, jobKeywords).catch(fail(`SmartRecruiters/${s}`))),
     ...workableBoards.map(s => fetchWorkable(s, jobKeywords).catch(fail(`Workable/${s}`))),
+    ...workdayBoards.map(s => fetchWorkday(s, jobKeywords).catch(fail(`Workday/${s}`))),
     fetchHNWhoIsHiring(jobKeywords).catch(fail('HN')),
     fetchTheMuse(jobKeywords, jobLocation).catch(fail('The Muse')),
     fetchRemotive(jobKeywords).catch(fail('Remotive')),
