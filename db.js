@@ -30,13 +30,26 @@ const DEFAULTS = {
     serpApiKey: '',
     followUpDays: 14,
     // Company slugs used for ATS board lookups. Editable in Settings.
-    greenhouseBoards: ['stripe', 'anthropic', 'airbnb', 'figma', 'databricks'],
-    leverBoards: ['plaid', 'ramp', 'scaleai'],
-    ashbyBoards: ['ramp', 'linear'],
+    // Roster leans SWE-internship + fintech/quant; all verified to return jobs.
+    greenhouseBoards: [
+      'stripe', 'anthropic', 'airbnb', 'figma', 'databricks',
+      'affirm', 'akunacapital', 'brex', 'chime', 'cloudflare', 'coinbase',
+      'datadog', 'discord', 'doordashusa', 'drweng', 'imc', 'janestreet',
+      'jumptrading', 'marqeta', 'mongodb', 'optiverus', 'point72', 'reddit',
+      'robinhood', 'roblox', 'sofi', 'scaleai',
+    ],
+    // 'ramp' moved to Ashby, 'scaleai' to Greenhouse — Lever slug now just Plaid.
+    leverBoards: ['plaid'],
+    ashbyBoards: ['ramp', 'linear', 'notion', 'snowflake', 'vanta'],
     smartrecruitersBoards: [],
     workableBoards: [],
     // Workday employers as "tenant:datacenter:site" (public CXS API, no key).
-    workdayBoards: ['blackrock:wd1:BlackRock_Professional', 'nvidia:wd5:NVIDIAExternalCareerSite'],
+    workdayBoards: [
+      'blackrock:wd1:BlackRock_Professional',
+      'nvidia:wd5:NVIDIAExternalCareerSite',
+      'capitalone:wd12:Capital_One',
+      'mastercard:wd1:CorporateCareers',
+    ],
     careersPages: [],        // arbitrary careers-page URLs, AI-extracted
     usaJobsEmail: '',        // optional, free — developer.usajobs.gov
     usaJobsKey: '',
