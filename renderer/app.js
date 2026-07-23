@@ -98,7 +98,7 @@ function titleCase(s) {
 // fetched before this feature existed.
 function classifyLevel(title) {
   const t = (title || '').toLowerCase();
-  if (/\bintern(ship)?\b|\bco-?op\b/.test(t)) return 'internship';
+  if (/\bintern(ship)?\b|\bco-?op\b|summer analyst|summer associate/.test(t)) return 'internship';
   if (/\bfellow(ship)?\b/.test(t)) return 'fellowship';
   if (/senior|staff|principal|\blead\b|manager|director|\bvp\b|head of|chief|\bsr\.?\b/.test(t)) return 'senior';
   if (/new grad|entry.level|junior|early career|university grad|campus|graduate program/.test(t)) return 'entry';
@@ -161,8 +161,9 @@ let oppRoleFilter = 'all';
 let oppTypeFilter = 'all';
 let oppAreaFilter = 'all';
 const expandedOpps = new Set(); // opportunity ids with their detail pane open
-const OPP_PAGE = 200;           // rows rendered per page in the Opportunities list
-let oppShowLimit = OPP_PAGE;
+const OPP_PAGE = 50;            // rows per page in the Opportunities list
+let oppPage = 0;               // current page, 0-indexed
+let oppSearch = '';           // free-text search across the feed
 let suggestions = null;     // last AI contact recommendations: { items, generatedAt }
 let editingEmail = null;    // null = creating a new contact
 let activeCourseId = null;  // course open in the Learn detail pane
@@ -964,9 +965,10 @@ let lastOppFilterSig = '';
 function renderOpps() {
   const list = $('#opp-list');
   list.innerHTML = '';
-  // Changing any filter starts pagination over from the first page.
-  const sig = `${oppFilter}|${oppRoleFilter}|${oppTypeFilter}|${oppAreaFilter}`;
-  if (sig !== lastOppFilterSig) { lastOppFilterSig = sig; oppShowLimit = OPP_PAGE; }
+  // Changing any filter or the search query resets pagination to page one.
+  const terms = oppSearch.toLowerCase().split(/\s+/).filter(Boolean);
+  const sig = `${oppFilter}|${oppRoleFilter}|${oppTypeFilter}|${oppAreaFilter}|${oppSearch}`;
+  if (sig !== lastOppFilterSig) { lastOppFilterSig = sig; oppPage = 0; }
   const rows = Object.values(opportunities)
     .filter(o => oppFilter === 'active'
       ? (o.status === 'new' || o.status === 'saved')
@@ -984,6 +986,11 @@ function renderOpps() {
       // New York gets alias matching: postings say "NYC", "NY", or "New York".
       if (oppAreaFilter.toLowerCase() === 'new york') return /new york|nyc|\bny\b/.test(loc);
       return loc.includes(oppAreaFilter.toLowerCase());
+    })
+    .filter(o => {
+      if (!terms.length) return true;
+      const hay = `${o.title} ${o.company} ${o.location} ${o.source}`.toLowerCase();
+      return terms.every(t => hay.includes(t)); // all words must match
     })
     .sort((a, b) =>
       // Matched postings sort by fit score; the rest fall back to recency.
@@ -1004,6 +1011,7 @@ function renderOpps() {
       cta.textContent = 'Reset filters';
       cta.addEventListener('click', () => {
         oppFilter = 'active'; oppRoleFilter = 'all'; oppTypeFilter = 'all'; oppAreaFilter = 'all';
+        oppSearch = ''; $('#opp-search').value = '';
         $$('#opp-filters .chip').forEach(c => c.classList.toggle('active', c.dataset.f === 'active'));
         $$('#opp-type-filters .chip').forEach(c => c.classList.toggle('active', c.dataset.t === 'all'));
         renderRoleChips(); renderAreaChips(); renderOpps();
@@ -1015,18 +1023,32 @@ function renderOpps() {
     return;
   }
 
-  // Paginate long lists: render a page at a time with a "show more" row.
-  const visible = rows.slice(0, oppShowLimit);
-  visible.forEach(o => list.appendChild(oppRow(o)));
-  if (rows.length > oppShowLimit) {
-    const more = document.createElement('button');
-    more.className = 'btn';
-    more.style.margin = '10px auto';
-    more.style.display = 'block';
-    more.textContent = `Show ${Math.min(OPP_PAGE, rows.length - oppShowLimit)} more of ${rows.length - oppShowLimit} remaining`;
-    more.addEventListener('click', () => { oppShowLimit += OPP_PAGE; renderOpps(); });
-    list.appendChild(more);
+  // Paginate: fixed page size with Prev/Next navigation.
+  const pageCount = Math.max(1, Math.ceil(rows.length / OPP_PAGE));
+  if (oppPage > pageCount - 1) oppPage = pageCount - 1; // filtering may shrink the list
+  const start = oppPage * OPP_PAGE;
+  rows.slice(start, start + OPP_PAGE).forEach(o => list.appendChild(oppRow(o)));
+
+  const pager = document.createElement('div');
+  pager.className = 'pager';
+  const info = document.createElement('span');
+  info.className = 'pager-info';
+  const first = start + 1, last = Math.min(start + OPP_PAGE, rows.length);
+  const toTop = () => $('.main').scrollTo({ top: 0, behavior: 'smooth' });
+  if (pageCount > 1) {
+    const prev = document.createElement('button');
+    prev.className = 'btn small'; prev.textContent = '‹ Prev'; prev.disabled = oppPage === 0;
+    prev.addEventListener('click', () => { oppPage--; renderOpps(); toTop(); });
+    const next = document.createElement('button');
+    next.className = 'btn small'; next.textContent = 'Next ›'; next.disabled = oppPage >= pageCount - 1;
+    next.addEventListener('click', () => { oppPage++; renderOpps(); toTop(); });
+    info.textContent = `Page ${oppPage + 1} of ${pageCount} · ${first}–${last} of ${rows.length}`;
+    pager.append(prev, info, next);
+  } else {
+    info.textContent = `${rows.length} result${rows.length === 1 ? '' : 's'}`;
+    pager.append(info);
   }
+  list.appendChild(pager);
 }
 
 // Area chips are derived from the locations actually present in the feed:
@@ -1083,6 +1105,8 @@ $('#opp-filters').addEventListener('click', e => {
   oppFilter = chip.dataset.f;
   renderOpps();
 });
+
+$('#opp-search').addEventListener('input', e => { oppSearch = e.target.value; renderOpps(); });
 
 $('#btn-refresh-opps').addEventListener('click', async e => {
   busy(e.target, true);

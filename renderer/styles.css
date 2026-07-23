@@ -150,6 +150,30 @@ body {
 .chip:hover  { border-color: var(--ink-3); color: var(--ink); }
 .chip.active { background: var(--inverse-surface); border-color: var(--inverse-surface); color: var(--inverse-on-surface); font-weight: 500; }
 
+/* ── Search + pager ──────────────────────────────────────────────────────── */
+.searchbar {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg); padding: 0 12px; margin-bottom: 12px;
+  transition: border-color 0.12s;
+}
+.searchbar:focus-within { border-color: var(--ink-3); }
+.searchbar .msym { color: var(--ink-3); font-size: 20px; flex-shrink: 0; }
+.searchbar input {
+  flex: 1; border: none; background: none; outline: none;
+  font-family: inherit; font-size: 13.5px; color: var(--ink); padding: 10px 0;
+}
+.searchbar input::placeholder { color: var(--ink-3); }
+.searchbar input::-webkit-search-cancel-button { cursor: pointer; }
+
+.pager {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 2px 4px;
+}
+.pager-info { flex: 1; text-align: center; font-size: 12.5px; color: var(--ink-2); }
+.pager .btn { min-width: 84px; flex-shrink: 0; }
+.pager .btn:disabled { opacity: 0.4; cursor: default; }
+
 /* ── Lists ───────────────────────────────────────────────────────────────── */
 .list { display: flex; flex-direction: column; gap: 6px; }
 .row {
