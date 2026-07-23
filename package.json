@@ -1,6 +1,6 @@
 {
   "name": "networking-opportunity-hub",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "AI-powered networking CRM and opportunity tracker",
   "main": "main.js",
   "scripts": {
